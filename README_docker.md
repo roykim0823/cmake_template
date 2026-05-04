@@ -1,9 +1,9 @@
 ## Docker Instructions
 
 The `.devcontainer/` directory provides a Dev Container based on
-`mcr.microsoft.com/devcontainers/cpp:2-ubuntu24.04`, preloaded with the LLVM 20
-toolchain (clang, clang++, clangd, clang-tidy, lld, lldb), ccache, CMake, and
-Node.js for editor language servers.
+`mcr.microsoft.com/devcontainers/cpp:2-ubuntu24.04`, preloaded with the LLVM 19
+toolchain (clang, clang++, clangd, clang-tidy, lld, lldb) installed from
+Ubuntu's universe repo, ccache, CMake, and Node.js for editor language servers.
 
 ### Using with VS Code (recommended)
 
@@ -32,14 +32,14 @@ The Dockerfile exposes two build args:
 
 | Arg | Default | Purpose |
 |---|---|---|
-| `LLVM_VERSION` | `20` | LLVM/Clang toolchain major version |
+| `LLVM_VERSION` | `19` | LLVM/Clang toolchain major version (must match a `clang-N` package available in Ubuntu 24.04's universe repo) |
 | `NODE_VERSION` | `22` | Node.js major version (used for LSP servers) |
 
 Override them with `--build-arg`, e.g.:
 
 ```bash
 docker build -f ./.devcontainer/Dockerfile \
-    --build-arg LLVM_VERSION=19 \
+    --build-arg LLVM_VERSION=18 \
     --tag=cmake_template:latest .
 ```
 

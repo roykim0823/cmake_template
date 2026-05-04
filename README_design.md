@@ -6,7 +6,7 @@ below explains *why*, so you can keep it, swap it, or turn it off.
 ## Goals
 
 1. Catch bugs at compile time, not in production.
-2. Stay portable across GCC, Clang, MSVC, and Emscripten.
+2. Stay portable across GCC and Clang on Linux/macOS.
 3. Work the same way as a top-level project or as a subdirectory dependency.
 
 ## Layout
@@ -29,25 +29,23 @@ is off so the standard flag is `-std=c++23`, not `-std=gnu++23`. This avoids
 
 ## Warnings
 
-`cmake/CompilerWarnings.cmake` enables a curated set per compiler — `/W4`
-plus extras on MSVC, and `-Wall -Wextra -Wshadow -Wconversion -Wpedantic ...`
-on GCC/Clang. Top-level builds add `-Werror` / `/WX`. Source:
+`cmake/CompilerWarnings.cmake` enables a curated set per compiler:
+`-Wall -Wextra -Wshadow -Wconversion -Wpedantic ...` on GCC/Clang, with a
+few extra GCC-only checks. Top-level builds add `-Werror`. Source:
 [cppbestpractices](https://github.com/lefticus/cppbestpractices/blob/master/02-Use_the_Tools_Available.md).
 
 ## Sanitizers
 
 ASan and UBSan are on by default for top-level GCC/Clang builds when a link
 probe shows them working. TSan, LSan, and MSan are off — they conflict with
-each other and MSan needs an instrumented standard library. Emscripten and
-MSVC skip the sanitizer pass.
+each other and MSan needs an instrumented standard library.
 
 ## Hardening
 
 `cmake/Hardening.cmake` adds `_FORTIFY_SOURCE=3` (release builds),
 `_GLIBCXX_ASSERTIONS`, `-fstack-protector-strong`, `-fcf-protection`, and
-`-fstack-clash-protection` when supported. MSVC gets `/sdl /DYNAMICBASE
-/guard:cf /NXCOMPAT /CETCOMPAT`. When no full sanitizer is active, the UBSan
-minimal runtime is layered on top.
+`-fstack-clash-protection` when supported. When no full sanitizer is
+active, the UBSan minimal runtime is layered on top.
 
 ## Static analysis
 
@@ -65,13 +63,14 @@ IPO/LTO is on by default at top level. It is gated through
 [CPM](https://github.com/cpm-cmake/CPM.cmake) fetches sources at configure
 time. Each package is gated by `if(NOT TARGET ...)`, so a parent project can
 supply its own version. `SYSTEM YES` silences warnings from third-party
-headers. Default set: fmt, spdlog, Catch2, CLI11, FTXUI, lefticus/tools.
+headers. Default set: fmt, spdlog, GoogleTest, CLI11, FTXUI, lefticus/tools.
+Catch2 is fetched only when `ENABLE_CATCH2=ON`.
 
 ## Testing
 
-* `test/tests.cpp` — Catch2 unit tests.
-* `test/constexpr_tests.cpp` — the same checks at compile time, so bugs
-  become build errors.
+* `test/tests_gtest.cpp` / `test/tests_catch2.cpp` — runtime unit tests.
+* `test/constexpr_tests_gtest.cpp` / `test/constexpr_tests_catch2.cpp` — the
+  same checks at compile time, so bugs become build errors.
 * `fuzz_test/` — libFuzzer harness, auto-enabled when ASan/TSan/UBSan and
   libFuzzer are all available.
 

@@ -23,13 +23,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options($<$<COMPILE_LANGUAGE:C>:-fdiagnostics-color=always>
                         $<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-color=always>)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION GREATER 1900)
-  add_compile_options(/diagnostics:column)
 else()
   message(STATUS "No colored compiler diagnostic set for '${CMAKE_CXX_COMPILER_ID}' compiler.")
 endif()
-
-
-# run vcvarsall when msvc is used
-include("${CMAKE_CURRENT_LIST_DIR}/VCEnvironment.cmake")
-myproject_run_vcvarsall()

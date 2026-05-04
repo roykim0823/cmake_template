@@ -20,13 +20,6 @@ It includes
  * a basic CLI example
  * examples for fuzz, unit, and constexpr testing
  * large GitHub action testing matrix
- * WebAssembly build support with automatic GitHub Pages deployment
-
-**Live Demo:** If you enable GitHub Pages in your project created from this template, you'll have a working example like this:
-- Main: [https://cpp-best-practices.github.io/cmake_template/](https://cpp-best-practices.github.io/cmake_template/)
-- Develop: [https://cpp-best-practices.github.io/cmake_template/develop/](https://cpp-best-practices.github.io/cmake_template/develop/)
-
-The `main` branch deploys to the root, `develop` to `/develop/`, and tags to `/tagname/`.
 
 It requires
 
@@ -56,16 +49,40 @@ Now you can clone the project locally and get to work!
 
 ## More Details
 
- * [Dependency Setup](README_dependencies.md)
- * [Building Details](README_building.md)
  * [Docker](README_docker.md)
+ * [Renaming the Project](README_rename.md)
 
 ## Testing
 
-See [Catch2 tutorial](https://github.com/catchorg/Catch2/blob/master/docs/tutorial.md)
+The default test framework is [Google Test](https://google.github.io/googletest/).
+[Catch2](https://github.com/catchorg/Catch2) is also wired up and can be enabled
+alongside or instead of gtest. Toggle frameworks with CMake options:
+
+    cmake -B build -S . -DENABLE_GTEST=ON -DENABLE_CATCH2=ON
+
+`ENABLE_GTEST` defaults to ON; `ENABLE_CATCH2` defaults to OFF. Each enabled
+framework builds its own `tests_*`, `constexpr_tests_*`, and
+`relaxed_constexpr_tests_*` executables and registers them with CTest under a
+framework-prefixed name (`gtest.unittests.*`, `catch2.unittests.*`, etc.).
 
 ## Fuzz testing
 
 See [libFuzzer Tutorial](https://github.com/google/fuzzing/blob/master/tutorial/libFuzzerTutorial.md)
 
+## Dev container scope
 
+The `.devcontainer/` image is a polyglot environment. Beyond the C++ toolchain
+(LLVM 19: clang, clangd, clang-tidy, lld, lldb, llvm-cov, etc.; CMake; Ninja;
+ccache), it also bundles:
+
+- **Python** — `uv` (installed in the image) plus a default Python 3.13
+  managed by uv.
+- **Rust** — installed via `rustup` (cargo, rustc).
+- **Node.js 22** — used to host editor language servers globally:
+  `typescript`, `typescript-language-server`, `pyright`,
+  `vscode-langservers-extracted` (HTML/CSS/JSON), `eslint`, and
+  `@typescript-eslint/*`.
+
+The Python and Rust toolchains support C++ adjacent workflows (build scripts,
+code generators, native bindings); the Node-based LSPs let the same container
+host editor tooling for any web/script files that live alongside the C++.

@@ -37,10 +37,6 @@
         // Make typescript-language-server & pyright findable by LSP clients
         "PATH": "${containerEnv:PATH}:/usr/lib/node_modules/.bin"
     },
-    // ── Lifecycle scripts ─────────────────────────────────────────────────────
-    "postCreateCommand": "bash .devcontainer/post-create.sh",
-    // post-start: runs every time the container starts — prints env health report.
-    "postStartCommand": "bash .devcontainer/check-env.sh",
     // ── Extensions ───────────────────────────────────────────────────────────
     "customizations": {
         "vscode": {
@@ -63,7 +59,7 @@
             ],
             "settings": {
                 // ── Shell ────────────────────────────────────────────────────
-                "terminal.integrated.defaultProfile.linux": "zsh",
+                "terminal.integrated.defaultProfile.linux": "bash",
                 // ── Editor (global) ──────────────────────────────────────────
                 "editor.formatOnSave": true,
                 "editor.rulers": [

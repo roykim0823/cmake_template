@@ -3,7 +3,7 @@ include(cmake/CPM.cmake)
 # Done as a function so that updates to variables like
 # CMAKE_CXX_FLAGS don't propagate out to other
 # targets
-function(myproject_setup_dependencies)
+function(setup_dependencies)
 
   # For each dependency, see if it's
   # already been provided to us by a parent project
@@ -34,7 +34,23 @@ function(myproject_setup_dependencies)
       "SPDLOG_FMT_EXTERNAL ON")
   endif()
 
-  if(NOT TARGET Catch2::Catch2WithMain)
+  if(ENABLE_GTEST AND NOT TARGET GTest::gtest_main)
+    cpmaddpackage(
+      NAME
+      googletest
+      GITHUB_REPOSITORY
+      "google/googletest"
+      GIT_TAG
+      "v1.15.2"
+      SYSTEM
+      YES
+      OPTIONS
+      "INSTALL_GTEST OFF"
+      "BUILD_GMOCK OFF"
+      "gtest_force_shared_crt ON")
+  endif()
+
+  if(ENABLE_CATCH2 AND NOT TARGET Catch2::Catch2WithMain)
     cpmaddpackage(
       NAME
       Catch2

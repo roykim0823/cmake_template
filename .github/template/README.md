@@ -7,18 +7,7 @@
 ## About %%myproject%%
 %%description%%
 
-## WebAssembly Demo
-
-Try the live WebAssembly demo:
-- Main: [https://%%myorg%%.github.io/%%myproject%%/](https://%%myorg%%.github.io/%%myproject%%/)
-- Develop: [https://%%myorg%%.github.io/%%myproject%%/develop/](https://%%myorg%%.github.io/%%myproject%%/develop/)
-
-The `main` branch deploys to the root, `develop` to `/develop/`, and tags to `/tagname/`.
-
-
 ## More Details
 
- * [Dependency Setup](README_dependencies.md)
- * [Building Details](README_building.md)
- * [Troubleshooting](README_troubleshooting.md)
  * [Docker](README_docker.md)
+ * [Renaming the Project](README_rename.md)

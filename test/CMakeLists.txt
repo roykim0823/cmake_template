@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15...3.23)
 
-project(CmakeConfigPackageTests 
+project(CmakeConfigPackageTests
   VERSION ${PROJECT_VERSION}
   LANGUAGES CXX)
 
@@ -11,15 +11,19 @@ if(PROJECT_IS_TOP_LEVEL OR TEST_INSTALLED_VERSION)
 
   find_package(myproject CONFIG REQUIRED) # for intro, project_options, ...
 
-  if(NOT TARGET myproject_options)
+  if(NOT TARGET options)
     message(FATAL_ERROR "Required config package not found!")
     return() # be strictly paranoid for Template Janitor github action! CK
   endif()
 endif()
 
-# ---- Dependencies ----
+if(NOT ENABLE_GTEST AND NOT ENABLE_CATCH2)
+  message(FATAL_ERROR
+    "BUILD_TESTING is on but no test framework is selected. "
+    "Set -DENABLE_GTEST=ON and/or -DENABLE_CATCH2=ON.")
+endif()
 
-include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
+# ---- CLI smoke tests (framework-agnostic) ----
 
 # Provide a simple smoke test to make sure that the CLI works and can display a --help message
 add_test(NAME cli.has_help COMMAND intro --help)
@@ -41,86 +45,80 @@ add_test(
 add_test(NAME cli.version_matches COMMAND intro --version)
 set_tests_properties(cli.version_matches PROPERTIES PASS_REGULAR_EXPRESSION "${PROJECT_VERSION}")
 
-add_executable(tests tests.cpp)
-target_link_libraries(
-  tests
-  PRIVATE myproject::myproject_warnings
-          myproject::myproject_options
-          myproject::sample_library
-          Catch2::Catch2WithMain)
+# ---- Helper: build a test executable wired to the project's targets. ----
+function(_add_framework_test_executable name source)
+  add_executable(${name} ${source})
+  target_link_libraries(${name}
+    PRIVATE myproject::warnings
+            myproject::options
+            myproject::sample_library
+            ${ARGN})
+  configure_linker(${name})
+endfunction()
 
-myproject_configure_linker(tests)
+# ---- Google Test (default) ----
+if(ENABLE_GTEST)
+  include(GoogleTest)
 
-if(WIN32 AND BUILD_SHARED_LIBS)
-  add_custom_command(
-    TARGET tests
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:tests> $<TARGET_FILE_DIR:tests>
-    COMMAND_EXPAND_LISTS)
+  _add_framework_test_executable(tests_gtest tests_gtest.cpp GTest::gtest_main)
+  gtest_discover_tests(tests_gtest TEST_PREFIX "gtest.unittests." DISCOVERY_MODE PRE_TEST)
+
+  _add_framework_test_executable(constexpr_tests_gtest constexpr_tests_gtest.cpp GTest::gtest_main)
+  gtest_discover_tests(constexpr_tests_gtest TEST_PREFIX "gtest.constexpr." DISCOVERY_MODE PRE_TEST)
+
+  # Same source compiled with RUNTIME_STATIC_ASSERT so static_asserts become
+  # runtime EXPECT_TRUEs — useful when debugging a constexpr regression.
+  _add_framework_test_executable(relaxed_constexpr_tests_gtest constexpr_tests_gtest.cpp GTest::gtest_main)
+  target_compile_definitions(relaxed_constexpr_tests_gtest PRIVATE RUNTIME_STATIC_ASSERT)
+  gtest_discover_tests(relaxed_constexpr_tests_gtest TEST_PREFIX "gtest.relaxed_constexpr." DISCOVERY_MODE PRE_TEST)
 endif()
 
-# automatically discover tests that are defined in catch based test files you can modify the unittests. Set TEST_PREFIX
-# to whatever you want, or use different for different binaries
-catch_discover_tests(
-  tests
-  TEST_PREFIX
-  "unittests."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "unittests."
-  OUTPUT_SUFFIX
-  .xml)
+# ---- Catch2 (optional) ----
+if(ENABLE_CATCH2)
+  include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 
-# Add a file containing a set of constexpr tests
-add_executable(constexpr_tests constexpr_tests.cpp)
-target_link_libraries(
-  constexpr_tests
-  PRIVATE myproject::myproject_warnings
-          myproject::myproject_options
-          myproject::sample_library
-          Catch2::Catch2WithMain)
+  _add_framework_test_executable(tests_catch2 tests_catch2.cpp Catch2::Catch2WithMain)
+  catch_discover_tests(
+    tests_catch2
+    TEST_PREFIX
+    "catch2.unittests."
+    REPORTER
+    XML
+    OUTPUT_DIR
+    .
+    OUTPUT_PREFIX
+    "catch2.unittests."
+    OUTPUT_SUFFIX
+    .xml)
 
-myproject_configure_linker(constexpr_tests)
+  _add_framework_test_executable(constexpr_tests_catch2 constexpr_tests_catch2.cpp Catch2::Catch2WithMain)
+  catch_discover_tests(
+    constexpr_tests_catch2
+    TEST_PREFIX
+    "catch2.constexpr."
+    REPORTER
+    XML
+    OUTPUT_DIR
+    .
+    OUTPUT_PREFIX
+    "catch2.constexpr."
+    OUTPUT_SUFFIX
+    .xml)
 
-catch_discover_tests(
-  constexpr_tests
-  TEST_PREFIX
-  "constexpr."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "constexpr."
-  OUTPUT_SUFFIX
-  .xml)
-
-# Disable the constexpr portion of the test, and build again this allows us to have an executable that we can debug when
-# things go wrong with the constexpr testing
-add_executable(relaxed_constexpr_tests constexpr_tests.cpp)
-target_link_libraries(
-  relaxed_constexpr_tests
-  PRIVATE myproject::myproject_warnings
-          myproject::myproject_options
-          myproject::sample_library
-          Catch2::Catch2WithMain)
-target_compile_definitions(relaxed_constexpr_tests PRIVATE -DCATCH_CONFIG_RUNTIME_STATIC_REQUIRE)
-
-myproject_configure_linker(relaxed_constexpr_tests)
-
-
-catch_discover_tests(
-  relaxed_constexpr_tests
-  TEST_PREFIX
-  "relaxed_constexpr."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "relaxed_constexpr."
-  OUTPUT_SUFFIX
-  .xml)
+  # Same source with CATCH_CONFIG_RUNTIME_STATIC_REQUIRE so STATIC_REQUIRE
+  # checks fire at runtime — useful when debugging a constexpr regression.
+  _add_framework_test_executable(relaxed_constexpr_tests_catch2 constexpr_tests_catch2.cpp Catch2::Catch2WithMain)
+  target_compile_definitions(relaxed_constexpr_tests_catch2 PRIVATE -DCATCH_CONFIG_RUNTIME_STATIC_REQUIRE)
+  catch_discover_tests(
+    relaxed_constexpr_tests_catch2
+    TEST_PREFIX
+    "catch2.relaxed_constexpr."
+    REPORTER
+    XML
+    OUTPUT_DIR
+    .
+    OUTPUT_PREFIX
+    "catch2.relaxed_constexpr."
+    OUTPUT_SUFFIX
+    .xml)
+endif()
