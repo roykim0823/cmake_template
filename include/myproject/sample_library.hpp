@@ -1,5 +1,4 @@
-#ifndef SAMPLE_LIBRARY_HPP
-#define SAMPLE_LIBRARY_HPP
+#pragma once
 
 #include <myproject/sample_library_export.hpp>
 
@@ -11,5 +10,3 @@
 
   return input * factorial_constexpr(input - 1);
 }
-
-#endif

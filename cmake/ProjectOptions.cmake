@@ -176,7 +176,7 @@ macro(local_options)
   endif()
 
   if(ENABLE_COVERAGE)
-    include(cmake/Tests.cmake)
+    include(cmake/Coverage.cmake)
     enable_coverage(options)
   endif()
 

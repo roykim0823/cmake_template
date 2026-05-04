@@ -25,13 +25,13 @@ project(
   LANGUAGES CXX C)
 
 include(cmake/PreventInSourceBuilds.cmake)
-include(ProjectOptions.cmake)
+include(cmake/ProjectOptions.cmake)
 
 
 setup_options()
 
 global_options()
-include(Dependencies.cmake)
+include(cmake/Dependencies.cmake)
 setup_dependencies()
 
 local_options()
@@ -96,7 +96,7 @@ include(cmake/PackageProject.cmake)
 # we know we want to ship
 package_project(
   TARGETS
-  intro
+  app
   options
   warnings
   # FIXME: this does not work! CK

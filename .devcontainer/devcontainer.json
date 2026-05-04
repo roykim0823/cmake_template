@@ -4,7 +4,7 @@
     "build": {
         "dockerfile": "Dockerfile",
         "args": {
-            "LLVM_VERSION": "20",
+            "LLVM_VERSION": "19",
             "NODE_VERSION": "22"
         }
     },

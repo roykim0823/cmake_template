@@ -8,17 +8,11 @@
     "configurePresets": [
         {
             "name": "conf-common",
-            "description": "General settings that apply to all configurations",
+            "description": "Settings shared by every preset (Linux/macOS only)",
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
-            "installDir": "${sourceDir}/out/install/${presetName}"
-        },
-        {
-            "name": "conf-unixlike-common",
-            "description": "Unix-like OS settings for gcc and clang toolchains",
-            "hidden": true,
-            "inherits": "conf-common",
+            "installDir": "${sourceDir}/out/install/${presetName}",
             "condition": {
                 "type": "inList",
                 "string": "${hostSystemName}",
@@ -34,10 +28,10 @@
             }
         },
         {
-            "name": "unixlike-gcc-debug",
+            "name": "gcc-debug",
             "displayName": "gcc Debug",
-            "description": "Target Unix-like OS with the gcc compiler, debug build type",
-            "inherits": "conf-unixlike-common",
+            "description": "GCC, debug build type",
+            "inherits": "conf-common",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "gcc",
                 "CMAKE_CXX_COMPILER": "g++",
@@ -45,10 +39,10 @@
             }
         },
         {
-            "name": "unixlike-gcc-release",
+            "name": "gcc-release",
             "displayName": "gcc Release",
-            "description": "Target Unix-like OS with the gcc compiler, release build type",
-            "inherits": "conf-unixlike-common",
+            "description": "GCC, release build type (RelWithDebInfo)",
+            "inherits": "conf-common",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "gcc",
                 "CMAKE_CXX_COMPILER": "g++",
@@ -56,10 +50,10 @@
             }
         },
         {
-            "name": "unixlike-clang-debug",
+            "name": "clang-debug",
             "displayName": "clang Debug",
-            "description": "Target Unix-like OS with the clang compiler, debug build type",
-            "inherits": "conf-unixlike-common",
+            "description": "Clang, debug build type",
+            "inherits": "conf-common",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++",
@@ -67,10 +61,10 @@
             }
         },
         {
-            "name": "unixlike-clang-release",
+            "name": "clang-release",
             "displayName": "clang Release",
-            "description": "Target Unix-like OS with the clang compiler, release build type",
-            "inherits": "conf-unixlike-common",
+            "description": "Clang, release build type (RelWithDebInfo)",
+            "inherits": "conf-common",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++",
@@ -81,7 +75,7 @@
     "testPresets": [
         {
             "name": "test-common",
-            "description": "Test CMake settings that apply to all configurations",
+            "description": "Test settings shared by every test preset",
             "hidden": true,
             "output": {
                 "outputOnFailure": true
@@ -92,32 +86,32 @@
             }
         },
         {
-            "name": "test-unixlike-gcc-debug",
+            "name": "test-gcc-debug",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-gcc-debug"
+            "configurePreset": "gcc-debug"
         },
         {
-            "name": "test-unixlike-gcc-release",
+            "name": "test-gcc-release",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-gcc-release"
+            "configurePreset": "gcc-release"
         },
         {
-            "name": "test-unixlike-clang-debug",
+            "name": "test-clang-debug",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-clang-debug"
+            "configurePreset": "clang-debug"
         },
         {
-            "name": "test-unixlike-clang-release",
+            "name": "test-clang-release",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-clang-release"
+            "configurePreset": "clang-release"
         }
     ]
 }

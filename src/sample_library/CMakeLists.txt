@@ -7,7 +7,7 @@ add_library(sample_library sample_library.cpp)
 
 add_library(${PROJECT_NAME}::sample_library ALIAS sample_library)
 
-target_link_libraries(sample_library PRIVATE options warnings)
+target_link_libraries(sample_library PRIVATE ${PROJECT_NAME}::options ${PROJECT_NAME}::warnings)
 
 target_include_directories(sample_library ${WARNING_GUARD} PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
                                                                   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
@@ -27,7 +27,7 @@ set_target_properties(
              CXX_VISIBILITY_PRESET hidden
              VISIBILITY_INLINES_HIDDEN YES)
 
-generate_export_header(sample_library EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/myproject/sample_library_export.hpp)
+generate_export_header(sample_library EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/${PROJECT_NAME}/sample_library_export.hpp)
 
 if(NOT BUILD_SHARED_LIBS)
   target_compile_definitions(sample_library PUBLIC SAMPLE_LIBRARY_STATIC_DEFINE)

@@ -20,12 +20,9 @@ runs:
   using: "composite"
   steps:
     - name: Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
-        # You might want to add .ccache to your cache configuration?
-        path: |
-          ~/.cache/pip
-          ~/.ccache
+        path: ~/.ccache
         key: ${{ runner.os }}-${{ inputs.compiler }}-${{ inputs.build_type }}-${{ inputs.generator }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/CMakeLists.txt') }}
         restore-keys: |
           ${{ runner.os }}-${{ inputs.compiler }}-${{ inputs.build_type }}

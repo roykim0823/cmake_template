@@ -6,7 +6,6 @@
 cmake_minimum_required(VERSION 3.21)
 
 set(APPLE FALSE)
-set(MSVC FALSE)
 set(CMAKE_CXX_COMPILER_ID "Clang")
 
 set_property(GLOBAL PROPERTY captured_compile_options "")

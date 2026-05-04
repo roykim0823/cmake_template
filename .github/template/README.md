@@ -9,5 +9,4 @@
 
 ## More Details
 
- * [Docker](README_docker.md)
- * [Renaming the Project](README_rename.md)
+ * [Docker / Dev Container](.devcontainer/README.md)
