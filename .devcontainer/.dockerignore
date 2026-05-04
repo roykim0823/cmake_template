@@ -1,25 +1,28 @@
-# Build directories and binary files
+# Build output
 build/
 out/
 cmake-build-*/
+target/
+dist/
+node_modules/
 
-# User spesific settings
+# User-specific CMake state
 CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
 
-# IDE files
+# IDE / editor
 .vs/
 .idea/
 .vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 *.swp
 *~
 _ReSharper*
+
+# Logs
 *.log
 
-# OS Generated Files
+# OS-generated
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -31,4 +34,7 @@ $RECYCLE.BIN/
 .TemporaryItems
 ehthumbs.db
 Thumbs.db
-Dockerfile
+
+# Git
+.git/
+.gitignore

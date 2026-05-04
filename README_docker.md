@@ -1,71 +1,61 @@
 ## Docker Instructions
 
-If you have [Docker](https://www.docker.com/) installed, you can run this
-in your terminal, when the Dockerfile is inside the `.devcontainer` directory:
+The `.devcontainer/` directory provides a Dev Container based on
+`mcr.microsoft.com/devcontainers/cpp:2-ubuntu24.04`, preloaded with the LLVM 20
+toolchain (clang, clang++, clangd, clang-tidy, lld, lldb), ccache, CMake, and
+Node.js for editor language servers.
+
+### Using with VS Code (recommended)
+
+Open the repository in VS Code with the **Dev Containers** extension installed,
+then run `Dev Containers: Reopen in Container`. VS Code builds the image,
+mounts the workspace, and connects as the `vscode` user.
+
+The container is configured with `--cap-add=SYS_PTRACE` and
+`seccomp=unconfined`, so `lldb`/`gdb` can attach to processes for debugging.
+
+### Using with plain Docker
+
+If you prefer to build and run the container directly:
 
 ```bash
-docker build -f ./.devcontainer/Dockerfile --tag=my_project:latest .
-docker run -it my_project:latest
+docker build -f ./.devcontainer/Dockerfile --tag=cmake_template:latest .
+docker run -it --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
+    -v "$(pwd)":/workspaces/cmake_template \
+    -w /workspaces/cmake_template \
+    cmake_template:latest bash
 ```
 
-This command will put you in a `bash` session in a Ubuntu 20.04 Docker container,
-with all of the tools listed in the [Dependencies](README_dependencies.md#dependencies) section already installed.
-Additionally, you will have `g++-11` and `clang++-13` installed as the default
-versions of `g++` and `clang++`.
+### Build args
 
-If you want to build this container using some other versions of gcc and clang,
-you may do so with the `GCC_VER` and `LLVM_VER` arguments:
+The Dockerfile exposes two build args:
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `LLVM_VERSION` | `20` | LLVM/Clang toolchain major version |
+| `NODE_VERSION` | `22` | Node.js major version (used for LSP servers) |
+
+Override them with `--build-arg`, e.g.:
 
 ```bash
-docker build --tag=myproject:latest --build-arg GCC_VER=10 --build-arg LLVM_VER=11 .
+docker build -f ./.devcontainer/Dockerfile \
+    --build-arg LLVM_VERSION=19 \
+    --tag=cmake_template:latest .
 ```
 
-The CC and CXX environment variables are set to GCC version 11 by default.
-If you wish to use clang as your default CC and CXX environment variables, you
-may do so like this:
+### Building the project inside the container
+
+`clang` is the default `CC`/`CXX` (set via `remoteEnv`), and ccache is wired in
+through `/usr/local/bin` shims, so:
 
 ```bash
-docker build --tag=my_project:latest --build-arg USE_CLANG=1 .
+cmake -S . -B ./build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build ./build
 ```
 
-You will be logged in as root, so you will see the `#` symbol as your prompt.
-You will be in a directory that contains a copy of the `cpp_starter_project`;
-any changes you make to your local copy will not be updated in the Docker image
-until you rebuild it.
-If you need to mount your local copy directly in the Docker image, see
-[Docker volumes docs](https://docs.docker.com/storage/volumes/).
-TLDR:
+To build with GCC instead, install it inside the container or override
+explicitly:
 
 ```bash
-docker run -it \
-	-v absolute_path_on_host_machine:absolute_path_in_guest_container \
-	my_project:latest
+CC=gcc CXX=g++ cmake -S . -B ./build
 ```
-
-You can configure and build [as directed above](#build) using these commands:
-
-```bash
-/starter_project# mkdir build
-/starter_project# cmake -S . -B ./build
-/starter_project# cmake --build ./build
-```
-
-You can configure and build using `clang-13`, without rebuilding the container,
-with these commands:
-
-```bash
-/starter_project# mkdir build
-/starter_project# CC=clang CXX=clang++ cmake -S . -B ./build
-/starter_project# cmake --build ./build
-```
-
-The `ccmake` tool is also installed; you can substitute `ccmake` for `cmake` to
-configure the project interactively.
-All of the tools this project supports are installed in the Docker image;
-enabling them is as simple as flipping a switch using the `ccmake` interface.
-Be aware that some of the sanitizers conflict with each other, so be sure to
-run them separately.
-
-A script called `build_examples.sh` is provided to help you to build the example
-GUI projects in this container.
-
