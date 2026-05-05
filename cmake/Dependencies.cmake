@@ -46,7 +46,7 @@ function(setup_dependencies)
       YES
       OPTIONS
       "INSTALL_GTEST OFF"
-      "BUILD_GMOCK OFF"
+      "BUILD_GMOCK ON"
       "gtest_force_shared_crt ON")
   endif()
 

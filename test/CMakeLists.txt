@@ -43,6 +43,10 @@ if(ENABLE_GTEST)
 
   _add_framework_test_executable(constexpr_tests_gtest constexpr_tests_gtest.cpp GTest::gtest_main)
   gtest_discover_tests(constexpr_tests_gtest TEST_PREFIX "gtest.constexpr." DISCOVERY_MODE PRE_TEST)
+
+  # gmock demo — uses GTest::gmock_main (which initialises gtest + gmock).
+  _add_framework_test_executable(mock_test_gtest mock_test_gtest.cpp GTest::gmock_main)
+  gtest_discover_tests(mock_test_gtest TEST_PREFIX "gtest.mock." DISCOVERY_MODE PRE_TEST)
 endif()
 
 # ---- Catch2 (optional) ----

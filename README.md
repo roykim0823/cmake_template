@@ -361,3 +361,4 @@ The default build type is `RelWithDebInfo` — debuggable and fast.
  * [Docker / Dev Container](.devcontainer/README.md)
  * [GitHub Configuration](.github/README.md)
  * [CMake Modules](cmake/README.md)
+ * [Build the template from scratch (tutorial)](dummy_cpp_dev.md)

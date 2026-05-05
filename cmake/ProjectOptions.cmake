@@ -1,36 +1,60 @@
+# Pull in the dependency block so a single setup_project() call wires
+# everything up — options, IPO, hardening, dependencies, per-target settings.
+include(cmake/Dependencies.cmake)
 include(cmake/LibFuzzer.cmake)
 include(CMakeDependentOption)
 include(CheckCXXCompilerFlag)
-
-
 include(CheckCXXSourceCompiles)
 
 
+# Probe whether the toolchain supports ASan / UBSan at link time. Sets
+# SUPPORTS_ASAN and SUPPORTS_UBSAN in the calling scope. Used to pick
+# default values for ENABLE_SANITIZER_* options.
 macro(supports_sanitizers)
   if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang.*" OR CMAKE_CXX_COMPILER_ID MATCHES ".*GNU.*")
-    set(TEST_PROGRAM "int main() { return 0; }")
+    set(_test "int main() { return 0; }")
 
     set(CMAKE_REQUIRED_FLAGS "-fsanitize=undefined")
     set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=undefined")
-    check_cxx_source_compiles("${TEST_PROGRAM}" HAS_UBSAN_LINK_SUPPORT)
-    set(SUPPORTS_UBSAN ${HAS_UBSAN_LINK_SUPPORT})
+    check_cxx_source_compiles("${_test}" SUPPORTS_UBSAN)
 
     set(CMAKE_REQUIRED_FLAGS "-fsanitize=address")
     set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=address")
-    check_cxx_source_compiles("${TEST_PROGRAM}" HAS_ASAN_LINK_SUPPORT)
-    set(SUPPORTS_ASAN ${HAS_ASAN_LINK_SUPPORT})
+    check_cxx_source_compiles("${_test}" SUPPORTS_ASAN)
   else()
     set(SUPPORTS_UBSAN OFF)
     set(SUPPORTS_ASAN OFF)
   endif()
 endmacro()
 
-macro(setup_options)
+
+# Decide whether to layer the UBSan minimal runtime on top of hardening.
+# Used by both the global and the per-target hardening paths.
+macro(_compute_ubsan_minimal_runtime)
+  if(NOT SUPPORTS_UBSAN
+     OR ENABLE_SANITIZER_UNDEFINED
+     OR ENABLE_SANITIZER_ADDRESS
+     OR ENABLE_SANITIZER_THREAD
+     OR ENABLE_SANITIZER_LEAK)
+    set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
+  else()
+    set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
+  endif()
+endmacro()
+
+
+# Single entry point. Run from CMakeLists.txt after project(). Order is:
+#   1. declare options and probe sanitizer support
+#   2. apply project-wide settings (IPO, global hardening) — before deps
+#   3. fetch dependencies via setup_dependencies()
+#   4. apply per-target settings on the `options` / `warnings` interface libs
+macro(setup_project)
+  # ── 1. Declare options ─────────────────────────────────────────────────────
   option(ENABLE_HARDENING "Enable hardening" ON)
   option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
   cmake_dependent_option(
     ENABLE_GLOBAL_HARDENING
-    "Attempt to push hardening options to built dependencies"
+    "Push hardening options to built dependencies"
     ON
     ENABLE_HARDENING
     OFF)
@@ -39,30 +63,30 @@ macro(setup_options)
 
   if(NOT PROJECT_IS_TOP_LEVEL OR PACKAGING_MAINTAINER_MODE)
     option(ENABLE_IPO "Enable IPO/LTO" OFF)
-    option(WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
+    option(WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
     option(ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
     option(ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
-    option(ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
+    option(ENABLE_SANITIZER_UNDEFINED "Enable undefined-behavior sanitizer" OFF)
     option(ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
     option(ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
     option(ENABLE_UNITY_BUILD "Enable unity builds" OFF)
     option(ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
-    option(ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
+    option(ENABLE_CPPCHECK "Enable cppcheck analysis" OFF)
     option(ENABLE_PCH "Enable precompiled headers" OFF)
-    option(ENABLE_CACHE "Enable ccache" OFF)
+    option(ENABLE_CACHE "Enable ccache / sccache" OFF)
   else()
     option(ENABLE_IPO "Enable IPO/LTO" ON)
-    option(WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
+    option(WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
     option(ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" ${SUPPORTS_ASAN})
     option(ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
-    option(ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" ${SUPPORTS_UBSAN})
+    option(ENABLE_SANITIZER_UNDEFINED "Enable undefined-behavior sanitizer" ${SUPPORTS_UBSAN})
     option(ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
     option(ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
     option(ENABLE_UNITY_BUILD "Enable unity builds" OFF)
     option(ENABLE_CLANG_TIDY "Enable clang-tidy" ON)
-    option(ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
+    option(ENABLE_CPPCHECK "Enable cppcheck analysis" ON)
     option(ENABLE_PCH "Enable precompiled headers" OFF)
-    option(ENABLE_CACHE "Enable ccache" ON)
+    option(ENABLE_CACHE "Enable ccache / sccache" ON)
   endif()
 
   if(NOT PROJECT_IS_TOP_LEVEL)
@@ -84,44 +108,31 @@ macro(setup_options)
 
   check_libfuzzer_support(LIBFUZZER_SUPPORTED)
   if(LIBFUZZER_SUPPORTED AND (ENABLE_SANITIZER_ADDRESS OR ENABLE_SANITIZER_THREAD OR ENABLE_SANITIZER_UNDEFINED))
-    set(DEFAULT_FUZZER ON)
+    set(_default_fuzzer ON)
   else()
-    set(DEFAULT_FUZZER OFF)
+    set(_default_fuzzer OFF)
   endif()
+  option(BUILD_FUZZ_TESTS "Build the libFuzzer harness" ${_default_fuzzer})
 
-  option(BUILD_FUZZ_TESTS "Enable fuzz testing executable" ${DEFAULT_FUZZER})
-
-  # Test frameworks. At least one must be ON when BUILD_TESTING is enabled.
   option(ENABLE_GTEST "Enable Google Test framework (default)" ON)
   option(ENABLE_CATCH2 "Enable Catch2 test framework" OFF)
 
-endmacro()
-
-macro(global_options)
+  # ── 2. Apply project-wide settings ─────────────────────────────────────────
   if(ENABLE_IPO)
     include(cmake/InterproceduralOptimization.cmake)
     enable_ipo()
   endif()
 
-  supports_sanitizers()
-
   if(ENABLE_HARDENING AND ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
-       OR ENABLE_SANITIZER_UNDEFINED
-       OR ENABLE_SANITIZER_ADDRESS
-       OR ENABLE_SANITIZER_THREAD
-       OR ENABLE_SANITIZER_LEAK)
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
-    else()
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
-    endif()
-    message("${ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${ENABLE_SANITIZER_UNDEFINED}")
+    _compute_ubsan_minimal_runtime()
     enable_hardening(options ON ${ENABLE_UBSAN_MINIMAL_RUNTIME})
   endif()
-endmacro()
 
-macro(local_options)
+  # ── 3. Fetch dependencies ──────────────────────────────────────────────────
+  setup_dependencies()
+
+  # ── 4. Apply per-target settings ───────────────────────────────────────────
   if(PROJECT_IS_TOP_LEVEL)
     include(cmake/StandardProjectSettings.cmake)
   endif()
@@ -130,16 +141,9 @@ macro(local_options)
   add_library(options INTERFACE)
 
   include(cmake/CompilerWarnings.cmake)
-  set_project_warnings(
-    warnings
-    ${WARNINGS_AS_ERRORS}
-    ""
-    ""
-    "")
+  set_project_warnings(warnings ${WARNINGS_AS_ERRORS} "" "" "")
 
   include(cmake/Linker.cmake)
-  # Must configure each target with linker options, we're avoiding setting it globally for now
-
   include(cmake/Sanitizers.cmake)
   enable_sanitizers(
     options
@@ -152,12 +156,7 @@ macro(local_options)
   set_target_properties(options PROPERTIES UNITY_BUILD ${ENABLE_UNITY_BUILD})
 
   if(ENABLE_PCH)
-    target_precompile_headers(
-      options
-      INTERFACE
-      <vector>
-      <string>
-      <utility>)
+    target_precompile_headers(options INTERFACE <vector> <string> <utility>)
   endif()
 
   if(ENABLE_CACHE)
@@ -169,10 +168,8 @@ macro(local_options)
   if(ENABLE_CLANG_TIDY)
     enable_clang_tidy(options ${WARNINGS_AS_ERRORS})
   endif()
-
   if(ENABLE_CPPCHECK)
-    enable_cppcheck(${WARNINGS_AS_ERRORS} "" # override cppcheck options
-    )
+    enable_cppcheck(${WARNINGS_AS_ERRORS} "")
   endif()
 
   if(ENABLE_COVERAGE)
@@ -180,26 +177,9 @@ macro(local_options)
     enable_coverage(options)
   endif()
 
-  if(WARNINGS_AS_ERRORS)
-    check_cxx_compiler_flag("-Wl,--fatal-warnings" LINKER_FATAL_WARNINGS)
-    if(LINKER_FATAL_WARNINGS)
-      # This is not working consistently, so disabling for now
-      # target_link_options(options INTERFACE -Wl,--fatal-warnings)
-    endif()
-  endif()
-
   if(ENABLE_HARDENING AND NOT ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
-       OR ENABLE_SANITIZER_UNDEFINED
-       OR ENABLE_SANITIZER_ADDRESS
-       OR ENABLE_SANITIZER_THREAD
-       OR ENABLE_SANITIZER_LEAK)
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
-    else()
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
-    endif()
+    _compute_ubsan_minimal_runtime()
     enable_hardening(options OFF ${ENABLE_UBSAN_MINIMAL_RUNTIME})
   endif()
-
 endmacro()

@@ -1,39 +1,38 @@
 # `cmake/` — Build-System Modules
 
-Every `.cmake` file lives here. The root holds only `CMakeLists.txt`. Two
-files in this folder act as **entry points** that `CMakeLists.txt` calls
-into; the rest are **utility modules** included on demand.
+Every `.cmake` file lives here. The root holds only `CMakeLists.txt`.
+`ProjectOptions.cmake` is the single entry point; everything else is a
+utility module pulled in on demand.
 
 ## How it fits together
 
 ```
-CMakeLists.txt                   ← the only .cmake-related file at the root
-├── include(cmake/PreventInSourceBuilds.cmake)   ← fail fast on cmake -B .
-├── include(cmake/ProjectOptions.cmake)
-│   ├── setup_options()          ← declare ENABLE_HARDENING / ENABLE_GTEST / ...
-│   ├── global_options()         ← apply project-wide (IPO, hardening)
-│   └── local_options()          ← apply per-target (warnings, sanitizers)
-│       ├── include(cmake/StandardProjectSettings.cmake)
-│       ├── include(cmake/CompilerWarnings.cmake)
-│       ├── include(cmake/Linker.cmake)
-│       ├── include(cmake/Sanitizers.cmake)
-│       ├── include(cmake/StaticAnalyzers.cmake)
-│       ├── include(cmake/Cache.cmake)
-│       ├── include(cmake/Coverage.cmake)
-│       ├── include(cmake/Hardening.cmake)
-│       ├── include(cmake/InterproceduralOptimization.cmake)
-│       └── include(cmake/LibFuzzer.cmake)        ← used during option resolution
-├── include(cmake/Dependencies.cmake)
-│   └── setup_dependencies()
-│       └── include(cmake/CPM.cmake) → cpmaddpackage(fmt, spdlog, gtest, ...)
-└── package_project(TARGETS ...)
-    └── include(cmake/PackageProject.cmake)       ← install + CMake config files
+CMakeLists.txt                                ← the only .cmake-related file at the root
+├── include(cmake/PreventInSourceBuilds.cmake)  ← fail fast on cmake -B .
+├── include(cmake/ProjectOptions.cmake)         ← (auto-includes Dependencies.cmake + LibFuzzer.cmake)
+└── setup_project()                             ← one macro that does everything below:
+    ├── declare ENABLE_* / WARNINGS_AS_ERRORS / BUILD_FUZZ_TESTS / ENABLE_GTEST / ...
+    ├── apply project-wide settings (IPO, global hardening)
+    ├── setup_dependencies()                    ← CPM fetch: fmt, spdlog, gtest, CLI11, ...
+    └── apply per-target settings on `options` / `warnings` interface libs
+        ├── include(cmake/StandardProjectSettings.cmake)
+        ├── include(cmake/CompilerWarnings.cmake)
+        ├── include(cmake/Linker.cmake)
+        ├── include(cmake/Sanitizers.cmake)
+        ├── include(cmake/StaticAnalyzers.cmake)
+        ├── include(cmake/Cache.cmake)
+        ├── include(cmake/Coverage.cmake)
+        └── include(cmake/Hardening.cmake)
+
+CMakeLists.txt continues:
+└── package_project(TARGETS app options warnings)
+    └── include(cmake/PackageProject.cmake)     ← install + CMake config files
 ```
 
-`ProjectOptions.cmake` `include(...)`s a utility module from this folder
-only when its corresponding option is on. Defaults are *strict when
-top-level*, *quiet when consumed as a subdirectory* — see
-[`../README.md#design-choices`](../README.md#design-choices) for the rationale.
+Each utility module is `include()`d only when its corresponding option is on.
+Defaults are *strict when top-level*, *quiet when consumed as a subdirectory*
+— see [`../README.md#design-choices`](../README.md#design-choices) for the
+rationale.
 
 ## Quick map
 
@@ -67,21 +66,24 @@ top-level*, *quiet when consumed as a subdirectory* — see
 ### Entry points
 
 #### `ProjectOptions.cmake`
-Three macros split by *when* they should run, all called from `CMakeLists.txt`:
+Defines a single macro **`setup_project()`** — the one call your
+`CMakeLists.txt` makes after `project(...)`. Internally it does four things,
+in order, because the order matters:
 
-- **`setup_options()`** — declares every `ENABLE_*` / `WARNINGS_AS_ERRORS` /
-  `BUILD_FUZZ_TESTS` `option()`. Defaults flip based on `PROJECT_IS_TOP_LEVEL`
-  (strict when this is the top project, quiet when consumed as a
-  subdirectory). Also probes `SUPPORTS_ASAN` / `SUPPORTS_UBSAN` via test
-  programs.
-- **`global_options()`** — applies project-wide settings: IPO/LTO and global
-  hardening flags. Runs *before* `setup_dependencies()` so dependencies
-  inherit the global compile flags.
-- **`local_options()`** — creates the `options` and `warnings` interface
-  libraries and wires them up: warnings, linker, sanitizers, PCH, ccache,
-  clang-tidy, cppcheck, coverage. These are scoped to *your* code via the
-  alias targets `${PROJECT_NAME}::options` / `${PROJECT_NAME}::warnings`,
-  so dependencies aren't subjected to your strict checks.
+1. **Declare options.** Every `ENABLE_*` / `WARNINGS_AS_ERRORS` /
+   `BUILD_FUZZ_TESTS` toggle, with defaults that flip on
+   `PROJECT_IS_TOP_LEVEL` (strict when top-level, quiet when consumed as a
+   subdirectory). Also probes `SUPPORTS_ASAN` / `SUPPORTS_UBSAN` to pick
+   sensible defaults.
+2. **Apply project-wide settings** (IPO/LTO, global hardening). Has to
+   happen before dependencies so they inherit the flags.
+3. **Fetch dependencies** by calling `setup_dependencies()` from
+   `Dependencies.cmake` (auto-included).
+4. **Apply per-target settings** on the `options` / `warnings` `INTERFACE`
+   libraries — warnings, linker, sanitizers, PCH, ccache, clang-tidy,
+   cppcheck, coverage. These are exposed to your code via the alias targets
+   `${PROJECT_NAME}::options` / `${PROJECT_NAME}::warnings`, so
+   dependencies aren't subjected to your strict checks.
 
 #### `Dependencies.cmake`
 A single `function(setup_dependencies)` that calls `cpmaddpackage(...)` for
