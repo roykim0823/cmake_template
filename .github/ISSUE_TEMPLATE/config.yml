@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/cpp-best-practices/cmake_template/discussions
+    about: Ask a question or share an idea — please use Discussions, not Issues.
+  - name: Security vulnerability
+    url: https://github.com/cpp-best-practices/cmake_template/security/advisories/new
+    about: Report security issues privately. Do NOT open a public issue.

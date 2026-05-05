@@ -104,3 +104,50 @@ macro(enable_clang_tidy target WARNINGS_AS_ERRORS)
   endif()
 endmacro()
 
+
+# Run cpplint (Google C++ style linter) on every translation unit.
+# Off by default — Google style differs from this template's .clang-format,
+# so it's opt-in for projects that explicitly want Google style enforcement.
+macro(enable_cpplint WARNINGS_AS_ERRORS)
+  find_program(CPPLINT cpplint)
+  if(CPPLINT)
+    # Reasonable filter set: drop checks that conflict with this template's
+    # style (120-col line limit, headers in include/<project>/, etc.).
+    # Override via .CPPLINT config file at the repo root if you need to.
+    set(CPPLINT_OPTIONS
+        ${CPPLINT}
+        --linelength=120
+        --filter=-legal/copyright,-build/include_subdir,-build/c++11,-whitespace/braces,-whitespace/indent)
+
+    if(${WARNINGS_AS_ERRORS})
+      list(APPEND CPPLINT_OPTIONS --quiet)
+    endif()
+
+    set(CMAKE_CXX_CPPLINT ${CPPLINT_OPTIONS})
+  else()
+    message(WARNING "cpplint requested but executable not found (pip install cpplint)")
+  endif()
+endmacro()
+
+
+# Run include-what-you-use (IWYU) on every translation unit. Reports
+# missing/unused #includes. Off by default — IWYU is noisy on stdlib
+# code and most projects only run it occasionally rather than every build.
+macro(enable_iwyu)
+  find_program(IWYU NAMES include-what-you-use iwyu)
+  if(IWYU)
+    set(IWYU_OPTIONS
+        ${IWYU}
+        -Xiwyu --no_fwd_decls
+        -Xiwyu --quoted_includes_first)
+
+    if(NOT "${CMAKE_CXX_STANDARD}" STREQUAL "")
+      list(APPEND IWYU_OPTIONS -std=c++${CMAKE_CXX_STANDARD})
+    endif()
+
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_OPTIONS})
+  else()
+    message(WARNING "include-what-you-use requested but executable not found")
+  endif()
+endmacro()
+

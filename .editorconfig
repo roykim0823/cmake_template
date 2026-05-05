@@ -1,0 +1,53 @@
+# EditorConfig — https://editorconfig.org
+# Cross-editor baseline. C++-specific deep style still lives in .clang-format;
+# this file only covers basic whitespace + encoding so non-C++ files
+# (CMake, YAML, Markdown, shell, JSON) stay consistent too.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# C/C++ — matches .clang-format (IndentWidth: 2, ColumnLimit: 120)
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,ipp,inl}]
+indent_size = 2
+max_line_length = 120
+
+# CMake — matches .cmake-format.yaml (tab_size: 2, line_width: 120)
+[{CMakeLists.txt,*.cmake,*.cmake.in}]
+indent_size = 2
+max_line_length = 120
+
+# Python — PEP 8 default
+[*.py]
+indent_size = 4
+max_line_length = 88
+
+# Shell scripts
+[*.{sh,bash,zsh}]
+indent_size = 2
+
+# Markdown — preserve trailing whitespace (it's a hard line break)
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefiles require literal tabs for recipe lines
+[{Makefile,makefile,GNUmakefile,*.mk}]
+indent_style = tab
+
+# Windows-only files keep CRLF (matches .gitattributes)
+[*.{bat,cmd,vcxproj,vcxproj.filters}]
+end_of_line = crlf
+
+# JSON / YAML / TOML
+[*.{json,yml,yaml,toml}]
+indent_size = 2
+
+# JavaScript / TypeScript — matches .prettierrc (tabWidth: 2)
+[*.{js,jsx,ts,tsx,mjs,cjs}]
+indent_size = 2
+max_line_length = 100

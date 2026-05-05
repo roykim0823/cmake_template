@@ -14,7 +14,7 @@ By default (when building as the top-level project):
  * Address Sanitizer and Undefined Behavior Sanitizer enabled where possible
  * Warnings as errors
  * clang-tidy and cppcheck static analysis
- * CPM for dependencies
+ * CPM for dependencies (vcpkg / Conan also supported — see [Dependency manager](#dependency-manager))
 
 It includes:
 
@@ -22,8 +22,14 @@ It includes:
  * a tiny example library (`src/sample_library/`)
  * unit and constexpr tests (Google Test by default, Catch2 optional)
  * a libFuzzer harness
+ * microbenchmarks (Google Benchmark, opt-in via `ENABLE_BENCHMARKS`)
+ * Doxygen API docs (opt-in via `ENABLE_DOXYGEN`)
  * a polyglot dev container (LLVM, Python, Rust, Node-based LSPs)
  * a large GitHub Actions testing matrix
+ * `.editorconfig`, `.pre-commit-config.yaml`, and a commitlint workflow for
+   local + CI hygiene checks
+ * community files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
+   issue templates, PR template, and a Keep-a-Changelog `CHANGELOG.md`
 
 It requires:
 
@@ -77,8 +83,15 @@ set of presets is `gcc-debug`, `gcc-release`, `clang-debug`, `clang-release`
 | `LICENSE` | MIT. |
 | `.clang-format` / `.clang-tidy` / `.clangd` | C++ tooling: formatter style, linter check selection, language-server config. |
 | `.cmake-format.yaml` | cmake-format style. |
+| `.editorconfig` | Cross-editor whitespace + encoding baseline (indent, EOL, charset). |
+| `.pre-commit-config.yaml` | [pre-commit](https://pre-commit.com) hooks: clang-format, cmake-format, file hygiene, conventional commits. |
+| `commitlint.config.js` | Conventional Commits rule set, enforced by `.github/workflows/commitlint.yml`. |
 | `.prettierrc` / `tsconfig.json` | JS/TS tooling defaults — only relevant if you add web/script tooling alongside the C++. |
 | `.gitignore` / `.gitattributes` | Git config (build dirs, IDE state, line endings). |
+| `vcpkg.json` / `conanfile.txt` | Dependency manifests for the alternate `DEPENDENCY_MANAGER=VCPKG\|CONAN` modes. |
+| `CHANGELOG.md` | Project changelog ([Keep a Changelog](https://keepachangelog.com/) format). |
+| `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` / `SECURITY.md` | Community / contribution guidelines. |
+| `bench/` | Microbenchmarks (Google Benchmark) — built when `ENABLE_BENCHMARKS=ON`. |
 | `.devcontainer/` | VS Code dev container — see [`.devcontainer/README.md`](.devcontainer/README.md). |
 | `.github/` | GitHub Actions / Dependabot / template-rename automation — see [`.github/README.md`](.github/README.md). |
 | `cmake/` | Build-system modules (warnings, sanitizers, hardening, dependencies, …) — see [`cmake/README.md`](cmake/README.md). |
@@ -209,6 +222,123 @@ Or override directly:
 
     CC=gcc CXX=g++ cmake -B build -S .
 
+### Generate API docs (Doxygen)
+
+Set `ENABLE_DOXYGEN=ON` and build the `docs` target:
+
+    cmake -B build -S . -DENABLE_DOXYGEN=ON
+    cmake --build build --target docs
+    open build/docs/html/index.html        # macOS; xdg-open on Linux
+
+Defaults are configured in [`cmake/Doxygen.cmake`](cmake/Doxygen.cmake) —
+HTML output, dot graphs, public headers + sources scanned, build/test/dep
+directories excluded. The README is used as the main page.
+
+### Run microbenchmarks
+
+The `bench/` directory holds Google Benchmark microbenchmarks, off by default:
+
+    cmake -B build -S . -DENABLE_BENCHMARKS=ON
+    cmake --build build --target bench_factorial
+    ./build/bench/bench_factorial
+
+Benchmarks aren't registered with CTest — they're timing-sensitive and shouldn't
+share a run with correctness tests.
+
+### Run cpplint or include-what-you-use
+
+Both are off by default — they're noisy and most projects only run them
+on demand. Install the tool, then turn the option on:
+
+    pip install cpplint
+    cmake -B build -S . -DENABLE_CPPLINT=ON
+    cmake --build build
+
+    # IWYU — separate package, e.g. `brew install include-what-you-use`
+    cmake -B build -S . -DENABLE_IWYU=ON
+    cmake --build build
+
+When a tool is requested but not installed, configure prints a `WARNING`
+and skips the integration — the build keeps going.
+
+### Run under Valgrind
+
+CTest has a built-in memcheck driver. Once `valgrind` is installed:
+
+    cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug \
+        -DENABLE_SANITIZER_ADDRESS=OFF -DENABLE_SANITIZER_UNDEFINED=OFF
+    cmake --build build
+    ctest --test-dir build -T memcheck --output-on-failure
+
+The memcheck options (`--leak-check=full`, `--error-exitcode=1`, …) are
+set in [`CMakeLists.txt`](CMakeLists.txt). Sanitizers and Valgrind don't
+mix — turn ASan/UBSan off for the memcheck run.
+
+### Run scan-build (Clang static analyzer)
+
+`scan-build` is a wrapper from the `clang-tools-extra` package. It works
+with any preset — wrap the build invocation:
+
+    scan-build cmake -B build -S . -DENABLE_CLANG_TIDY=OFF
+    scan-build -o scan-results cmake --build build
+    scan-view scan-results/<timestamp>     # opens HTML report
+
+This is independent of `clang-tidy`; the two tools have overlapping but
+distinct check sets.
+
+## Dependency manager
+
+The default is **CPM**: `cmake/Dependencies.cmake` fetches sources at
+configure time. To switch:
+
+| Manager | Manifest | Configure command |
+| --- | --- | --- |
+| `CPM` (default) | none | `cmake --preset clang-debug` |
+| `VCPKG` | [`vcpkg.json`](vcpkg.json) | `cmake --preset clang-debug -DDEPENDENCY_MANAGER=VCPKG --toolchain=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake` |
+| `CONAN` | [`conanfile.txt`](conanfile.txt) | `conan install . --output-folder=build --build=missing` then `cmake --preset clang-debug -DDEPENDENCY_MANAGER=CONAN --toolchain=build/conan_toolchain.cmake` |
+
+Internally each dependency goes through `_resolve_dependency()` — when
+`DEPENDENCY_MANAGER` is `CPM` it calls `cpmaddpackage(...)`; otherwise
+it falls back to `find_package()` (which works because the vcpkg/Conan
+toolchain file pre-populates the registry).
+
+The set of libraries (fmt, spdlog, GoogleTest, CLI11, Catch2, Google
+Benchmark) is identical across all three managers — but version pins
+differ slightly because each ecosystem ships different snapshots.
+
+## Local hygiene with pre-commit
+
+Install pre-commit once:
+
+    pip install pre-commit       # or: brew install pre-commit
+    pre-commit install           # registers .git/hooks/pre-commit
+    pre-commit install --hook-type commit-msg   # for conventional-commit checks
+
+After that, every `git commit` runs:
+
+- `clang-format` on changed C/C++ files (matches `.clang-format`).
+- `cmake-format` + `cmake-lint` on CMake files.
+- File hygiene: trailing-whitespace fix, EOL normalization, large-file
+  guard, YAML/JSON/TOML syntax checks.
+- `shellcheck` on shell scripts.
+- `prettier` on Markdown / YAML / JSON.
+- Conventional Commits check on the commit message.
+
+See [`.pre-commit-config.yaml`](.pre-commit-config.yaml). Hooks run on
+*staged* files only; force a full sweep with `pre-commit run --all-files`.
+
+## Commit message style
+
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/):
+
+    feat(cmake): add cpplint integration as opt-in ENABLE_CPPLINT option
+    fix(sanitizers): skip leak sanitizer on Apple platforms
+    docs: clarify how DEPENDENCY_MANAGER selects vcpkg vs Conan
+
+The rules live in [`commitlint.config.js`](commitlint.config.js). CI
+enforces them via [`.github/workflows/commitlint.yml`](.github/workflows/commitlint.yml)
+on PR titles and on every commit pushed to a PR.
+
 ## CMake options reference
 
 All toggles are passed at configure time as `-D<NAME>=ON|OFF`.
@@ -218,6 +348,10 @@ All toggles are passed at configure time as `-D<NAME>=ON|OFF`.
 | `WARNINGS_AS_ERRORS` | Promote warnings to errors (`-Werror`) | ON |
 | `ENABLE_CLANG_TIDY` | Run clang-tidy on every TU | ON |
 | `ENABLE_CPPCHECK` | Run cppcheck on every TU | ON |
+| `ENABLE_CPPLINT` | Run cpplint (Google C++ style linter) on every TU | OFF |
+| `ENABLE_IWYU` | Run include-what-you-use on every TU | OFF |
+| `ENABLE_DOXYGEN` | Generate API docs — adds `docs` build target | OFF |
+| `ENABLE_BENCHMARKS` | Build microbenchmarks under `bench/` (Google Benchmark) | OFF |
 | `ENABLE_HARDENING` | `_FORTIFY_SOURCE=3`, stack/CF protectors | ON |
 | `ENABLE_GLOBAL_HARDENING` | Apply hardening to dependencies too | ON (when hardening is on) |
 | `ENABLE_IPO` | Link-time optimization (LTO) | ON |
@@ -236,6 +370,7 @@ All toggles are passed at configure time as `-D<NAME>=ON|OFF`.
 | `USER_LINKER_OPTION` | Linker selection (`DEFAULT/LLD/MOLD/...`) | `DEFAULT` |
 | `CACHE_OPTION` | Compiler cache backend (`ccache`/`sccache`) | `ccache` |
 | `FUZZ_RUNTIME` | Seconds the fuzz test runs during ctest | `10` |
+| `DEPENDENCY_MANAGER` | Source for third-party libs (`CPM`/`VCPKG`/`CONAN`) — see [Dependency manager](#dependency-manager) | `CPM` |
 
 ¹ `BUILD_FUZZ_TESTS` defaults to ON only when libFuzzer **and** a sanitizer
 (asan/tsan/ubsan) are both available; otherwise OFF.
@@ -362,3 +497,7 @@ The default build type is `RelWithDebInfo` — debuggable and fast.
  * [GitHub Configuration](.github/README.md)
  * [CMake Modules](cmake/README.md)
  * [Build the template from scratch (tutorial)](dummy_cpp_dev.md)
+ * [Contributing guide](CONTRIBUTING.md)
+ * [Code of Conduct](CODE_OF_CONDUCT.md)
+ * [Security policy](SECURITY.md)
+ * [Changelog](CHANGELOG.md)

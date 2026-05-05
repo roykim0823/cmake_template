@@ -72,6 +72,8 @@ macro(setup_project)
     option(ENABLE_UNITY_BUILD "Enable unity builds" OFF)
     option(ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
     option(ENABLE_CPPCHECK "Enable cppcheck analysis" OFF)
+    option(ENABLE_CPPLINT "Enable cpplint (Google C++ style linter)" OFF)
+    option(ENABLE_IWYU "Enable include-what-you-use" OFF)
     option(ENABLE_PCH "Enable precompiled headers" OFF)
     option(ENABLE_CACHE "Enable ccache / sccache" OFF)
   else()
@@ -85,6 +87,11 @@ macro(setup_project)
     option(ENABLE_UNITY_BUILD "Enable unity builds" OFF)
     option(ENABLE_CLANG_TIDY "Enable clang-tidy" ON)
     option(ENABLE_CPPCHECK "Enable cppcheck analysis" ON)
+    # cpplint enforces Google C++ style — opt-in even at top level since
+    # most users don't want both Google style and this template's .clang-format.
+    option(ENABLE_CPPLINT "Enable cpplint (Google C++ style linter)" OFF)
+    # IWYU is noisy and typically run on demand rather than every build.
+    option(ENABLE_IWYU "Enable include-what-you-use" OFF)
     option(ENABLE_PCH "Enable precompiled headers" OFF)
     option(ENABLE_CACHE "Enable ccache / sccache" ON)
   endif()
@@ -101,6 +108,8 @@ macro(setup_project)
       ENABLE_UNITY_BUILD
       ENABLE_CLANG_TIDY
       ENABLE_CPPCHECK
+      ENABLE_CPPLINT
+      ENABLE_IWYU
       ENABLE_COVERAGE
       ENABLE_PCH
       ENABLE_CACHE)
@@ -116,6 +125,8 @@ macro(setup_project)
 
   option(ENABLE_GTEST "Enable Google Test framework (default)" ON)
   option(ENABLE_CATCH2 "Enable Catch2 test framework" OFF)
+  option(ENABLE_BENCHMARKS "Build microbenchmarks (Google Benchmark)" OFF)
+  option(ENABLE_DOXYGEN "Generate API docs with Doxygen (target: docs)" OFF)
 
   # ── 2. Apply project-wide settings ─────────────────────────────────────────
   if(ENABLE_IPO)
@@ -171,6 +182,12 @@ macro(setup_project)
   if(ENABLE_CPPCHECK)
     enable_cppcheck(${WARNINGS_AS_ERRORS} "")
   endif()
+  if(ENABLE_CPPLINT)
+    enable_cpplint(${WARNINGS_AS_ERRORS})
+  endif()
+  if(ENABLE_IWYU)
+    enable_iwyu()
+  endif()
 
   if(ENABLE_COVERAGE)
     include(cmake/Coverage.cmake)
@@ -181,5 +198,10 @@ macro(setup_project)
     include(cmake/Hardening.cmake)
     _compute_ubsan_minimal_runtime()
     enable_hardening(options OFF ${ENABLE_UBSAN_MINIMAL_RUNTIME})
+  endif()
+
+  if(ENABLE_DOXYGEN)
+    include(cmake/Doxygen.cmake)
+    enable_doxygen()
   endif()
 endmacro()

@@ -13,14 +13,14 @@ goal is to understand every piece, not to copy it.
 
 1. [Dev container](#step-1--the-dev-container)
 2. [Minimal CMake "Hello, world"](#step-2--minimal-cmake-hello-world)
-3. [Git basics](#step-3--git-basics)
+3. [Git basics](#step-3--git-basics) — adds `.gitignore`, `.gitattributes`, `.editorconfig`
 4. [CMake presets](#step-4--cmake-presets)
 5. [A library and a public header](#step-5--a-library-and-a-public-header)
 6. [Configured files (build metadata in C++)](#step-6--configured-files-build-metadata-in-c)
-7. [Dependencies via CPM](#step-7--dependencies-via-cpm)
+7. [Dependencies via CPM](#step-7--dependencies-via-cpm) — and how to switch to vcpkg / Conan
 8. [Compiler warnings + the options/warnings pattern](#step-8--compiler-warnings--the-optionswarnings-pattern)
 9. [Sanitizers](#step-9--sanitizers)
-10. [Static analysis (clang-tidy + cppcheck)](#step-10--static-analysis)
+10. [Static analysis](#step-10--static-analysis) — clang-tidy, cppcheck, cpplint, IWYU, scan-build, valgrind
 11. [Hardening](#step-11--hardening)
 12. [Linker, IPO, ccache](#step-12--linker-ipo-ccache)
 13. [Testing with Google Test](#step-13--testing-with-google-test)
@@ -33,7 +33,13 @@ goal is to understand every piece, not to copy it.
 20. [Template janitor + the rename script](#step-20--template-janitor--the-rename-script)
 21. [Final polish](#step-21--final-polish)
 
-**Optional (extras you may add later):** Doxygen / API docs, Google Benchmark.
+**Software-engineering practices (steps 22–26):**
+
+22. [Pre-commit hooks](#step-22--pre-commit-hooks)
+23. [Commit message linting](#step-23--commit-message-linting)
+24. [Doxygen / API docs](#step-24--doxygen--api-docs)
+25. [Microbenchmarks (Google Benchmark)](#step-25--microbenchmarks-google-benchmark)
+26. [Community files (CONTRIBUTING, SECURITY, CoC, issue/PR templates, CHANGELOG)](#step-26--community-files)
 
 ---
 
@@ -104,6 +110,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         clang-${LLVM_VERSION} \
         clang-format-${LLVM_VERSION} \
         clang-tidy-${LLVM_VERSION} \
+        clang-tools-${LLVM_VERSION} \
         clangd-${LLVM_VERSION} \
         lld-${LLVM_VERSION} \
         lldb-${LLVM_VERSION} \
@@ -111,6 +118,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libc++-${LLVM_VERSION}-dev \
         libc++abi-${LLVM_VERSION}-dev \
     && for tool in clang clang++ clangd clang-format clang-tidy \
+                   scan-build scan-view \
                    lldb lld ld.lld \
                    llvm-ar llvm-as llvm-cov llvm-dis llvm-dwarfdump \
                    llvm-link llvm-nm llvm-objcopy llvm-objdump \
@@ -119,6 +127,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
          bin="/usr/bin/${tool}-${LLVM_VERSION}"; \
          [ -f "$bin" ] && update-alternatives --install "/usr/bin/${tool}" "${tool}" "${bin}" 100 || true; \
        done \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ── Static analyzers / runtime checkers / docs ───────────────────────────────
+# Each tool here backs a CMake option or a workflow we wire up later:
+#   cppcheck     → ENABLE_CPPCHECK   (Step 10)
+#   iwyu         → ENABLE_IWYU       (Step 10e)
+#   doxygen      → ENABLE_DOXYGEN    (Step 24) — graphviz gives `dot`
+#   valgrind     → ctest -T memcheck (Step 10e)
+#   shellcheck   → pre-commit hook   (Step 22)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        cppcheck \
+        iwyu \
+        doxygen \
+        graphviz \
+        valgrind \
+        shellcheck \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── ccache ───────────────────────────────────────────────────────────────────
@@ -156,9 +180,26 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && echo 'export PATH="$HOME/.local/bin:$PATH"' >> "${HOME}/.bashrc" \
     && "${HOME}/.local/bin/uv" python install 3.13
 
+# Python-based dev tools — installed as standalone uv tools so each gets
+# its own isolated environment but lands on PATH (~/.local/bin).
+#   cpplint       → ENABLE_CPPLINT     (Step 10e)
+#   cmake-format  → matches .cmake-format.yaml + the pre-commit hook
+#   pre-commit    → .pre-commit-config.yaml runner (Step 22)
+#   conan         → DEPENDENCY_MANAGER=CONAN (Step 7f)
+RUN "${HOME}/.local/bin/uv" tool install cpplint \
+    && "${HOME}/.local/bin/uv" tool install cmake-format \
+    && "${HOME}/.local/bin/uv" tool install pre-commit \
+    && "${HOME}/.local/bin/uv" tool install conan
+
 # Rust via rustup (some C++ adjacent tools / build scripts are written in Rust).
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && echo 'source "$HOME/.cargo/env"' >> "${HOME}/.bashrc"
+
+# vcpkg — shallow clone + bootstrap. Backs DEPENDENCY_MANAGER=VCPKG (Step 7f).
+RUN git clone --depth 1 https://github.com/microsoft/vcpkg.git "${HOME}/vcpkg" \
+    && "${HOME}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics \
+    && echo 'export VCPKG_ROOT="$HOME/vcpkg"' >> "${HOME}/.bashrc" \
+    && echo 'export PATH="$VCPKG_ROOT:$PATH"' >> "${HOME}/.bashrc"
 
 # Compiler env so plain `cmake -B build -S .` picks clang and ccache without
 # extra flags.
@@ -485,6 +526,56 @@ useful to share (settings, debug configs, recommended extensions).
 
 `* text=auto eol=lf` makes every text file land with LF in the repo —
 even if a Windows contributor commits CRLF on their machine.
+
+### 3c. `.editorconfig` — cross-editor whitespace baseline
+
+`.gitattributes` fixes line endings *at commit time*. `.editorconfig`
+fixes them (and indent style, charset, final-newline, …) *as you type* —
+in every editor that supports it (VS Code, Vim, JetBrains, Sublime, …
+most do, the rest via a small plugin).
+
+```ini
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,ipp,inl}]
+indent_size = 2
+max_line_length = 120
+
+[{CMakeLists.txt,*.cmake,*.cmake.in}]
+indent_size = 2
+max_line_length = 120
+
+[*.py]
+indent_size = 4
+max_line_length = 88
+
+[*.md]
+trim_trailing_whitespace = false   # Markdown uses trailing spaces for hard breaks
+
+[{Makefile,makefile,GNUmakefile,*.mk}]
+indent_style = tab                  # Make literally requires tabs
+```
+
+Why have *both* `.editorconfig` and `.clang-format`?
+
+- `.clang-format` is C/C++-only and runs on demand (an explicit format
+  command, or CI). It controls deep style — brace placement, alignment,
+  line wrap.
+- `.editorconfig` is editor-agnostic and runs continuously. It controls
+  basic whitespace + encoding for *every* file type — CMake, YAML,
+  Markdown, JSON, shell, none of which clang-format touches.
+
+Think of `.editorconfig` as the first line of defense and `.clang-format`
+(plus `cmake-format`, `prettier`, …) as the deeper formatters layered on
+top.
 
 ### Try it
 
@@ -995,6 +1086,105 @@ cmake --build out/build/clang-debug
 The first configure spends a minute downloading fmt; subsequent ones use
 the local cache.
 
+### 7f. Make the dependency manager configurable (CPM / vcpkg / Conan)
+
+CPM is great for getting started — clone the repo, run cmake, everything
+else fetches itself. But for projects that ship into wider ecosystems,
+two manifest-based managers are common:
+
+- **vcpkg** (`vcpkg.json`) — Microsoft's manifest-mode manager.
+- **Conan** (`conanfile.txt`) — package versioning + binary cache server.
+
+The trick: every dependency is gated `if(NOT TARGET …)`. So if the
+toolchain file from vcpkg or Conan has already populated the registry
+(via `find_package`), the matching `cpmaddpackage()` block is skipped.
+
+We expose this as a single cache string `DEPENDENCY_MANAGER`:
+
+```cmake
+# cmake/Dependencies.cmake (top of file)
+set(DEPENDENCY_MANAGER "CPM" CACHE STRING
+    "Where to fetch third-party libraries: CPM | VCPKG | CONAN")
+set_property(CACHE DEPENDENCY_MANAGER PROPERTY STRINGS CPM VCPKG CONAN)
+
+if(DEPENDENCY_MANAGER STREQUAL "CPM")
+  include(cmake/CPM.cmake)
+endif()
+```
+
+A small dispatcher avoids duplicating each block twice:
+
+```cmake
+function(_resolve_dependency)
+  cmake_parse_arguments(PARSE_ARGV 0 _ARG "" "IF_NOT_TARGET" "CPM;FIND_PACKAGE")
+  if(TARGET ${_ARG_IF_NOT_TARGET})
+    return()
+  endif()
+  if(DEPENDENCY_MANAGER STREQUAL "CPM")
+    cpmaddpackage(${_ARG_CPM})
+  else()
+    find_package(${_ARG_FIND_PACKAGE} REQUIRED)
+  endif()
+endfunction()
+
+# Each dep is now a single declarative call, working under all three managers:
+_resolve_dependency(
+  IF_NOT_TARGET fmt::fmt
+  CPM           NAME fmt GITHUB_REPOSITORY "fmtlib/fmt" GIT_TAG 12.1.0 SYSTEM YES
+  FIND_PACKAGE  fmt CONFIG)
+```
+
+Add the manifest files at the repo root (used only when the matching
+manager is selected):
+
+```jsonc
+// vcpkg.json
+{
+  "name": "myproject",
+  "version-string": "0.0.2",
+  "dependencies": ["fmt", "spdlog", "cli11"],
+  "features": {
+    "tests":      { "dependencies": ["gtest"] },
+    "catch2":     { "dependencies": ["catch2"] },
+    "benchmarks": { "dependencies": ["benchmark"] }
+  }
+}
+```
+
+```ini
+# conanfile.txt
+[requires]
+fmt/11.0.2
+spdlog/1.15.0
+cli11/2.4.2
+gtest/1.15.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout
+```
+
+Switching managers is now just a configure-time flag:
+
+```bash
+# CPM (default)
+cmake --preset clang-debug
+
+# vcpkg
+cmake --preset clang-debug \
+    -DDEPENDENCY_MANAGER=VCPKG \
+    --toolchain=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+
+# Conan
+conan install . --output-folder=build --build=missing
+cmake --preset clang-debug \
+    -DDEPENDENCY_MANAGER=CONAN \
+    --toolchain=build/conan_toolchain.cmake
+```
+
 > **Next**: Compiler warnings — and the `options` / `warnings` interface
 > library pattern that scopes them to *your* code only.
 
@@ -1392,6 +1582,85 @@ cmake --build out/build/clang-debug 2>&1 | head -30
 ```
 
 You'll see clang-tidy diagnostics interleaved with compiler output.
+
+### 10e. Optional extras: cpplint, IWYU, scan-build, valgrind
+
+Beyond clang-tidy and cppcheck, four more analyzers commonly show up in
+mature C++ projects. Adding them is cheap because CMake supports a
+matching `CMAKE_CXX_*` hook variable for most of them.
+
+**cpplint** — Google's style linter. Off by default since Google style
+differs from this template's `.clang-format`:
+
+```cmake
+macro(enable_cpplint WARNINGS_AS_ERRORS)
+  find_program(CPPLINT cpplint)
+  if(CPPLINT)
+    set(CPPLINT_OPTIONS ${CPPLINT}
+        --linelength=120
+        --filter=-legal/copyright,-build/include_subdir,-whitespace/braces,-whitespace/indent)
+    set(CMAKE_CXX_CPPLINT ${CPPLINT_OPTIONS})
+  else()
+    message(WARNING "cpplint requested but executable not found (pip install cpplint)")
+  endif()
+endmacro()
+```
+
+**include-what-you-use** — header hygiene. Reports each missing /
+unused `#include`. Noisy on stdlib code so usually run on demand:
+
+```cmake
+macro(enable_iwyu)
+  find_program(IWYU NAMES include-what-you-use iwyu)
+  if(IWYU)
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE
+        ${IWYU} -Xiwyu --no_fwd_decls -std=c++${CMAKE_CXX_STANDARD})
+  else()
+    message(WARNING "include-what-you-use requested but executable not found")
+  endif()
+endmacro()
+```
+
+Wire both behind `option(ENABLE_CPPLINT …)` / `option(ENABLE_IWYU …)`
+in `ProjectOptions.cmake` (defaults OFF), call in `setup_project()`:
+
+```cmake
+if(ENABLE_CPPLINT) enable_cpplint(${WARNINGS_AS_ERRORS}) endif()
+if(ENABLE_IWYU)    enable_iwyu()                          endif()
+```
+
+**scan-build (Clang Static Analyzer)** — no CMake change required;
+it's a wrapper script that intercepts the compile commands:
+
+```bash
+scan-build cmake -B build -S . -DENABLE_CLANG_TIDY=OFF
+scan-build -o scan-results cmake --build build
+scan-view scan-results/<timestamp>     # opens HTML report
+```
+
+The `-DENABLE_CLANG_TIDY=OFF` matters — combining the two analyzers
+multiplies build time without much extra signal.
+
+**Valgrind / memcheck** — runtime check for leaks and uninitialized
+reads. CTest has a built-in driver. Add the options near the
+`include(CTest)` call in your top-level `CMakeLists.txt`:
+
+```cmake
+set(MEMORYCHECK_COMMAND_OPTIONS
+    "--leak-check=full --show-leak-kinds=all --error-exitcode=1")
+include(CTest)
+```
+
+Then run:
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug \
+    -DENABLE_SANITIZER_ADDRESS=OFF -DENABLE_SANITIZER_UNDEFINED=OFF
+cmake --build build
+ctest --test-dir build -T memcheck --output-on-failure
+```
+
+Sanitizers + Valgrind don't mix — pick one per build.
 
 > **Next**: Compile- and link-time hardening flags.
 
@@ -2499,12 +2768,298 @@ You now have a complete C++ project template:
 
 ---
 
-## Optional extras (covered later)
+## Step 22 — Pre-commit hooks
 
-- **Doxygen / API docs** — add `cmake/Doxygen.cmake` + Doxyfile, generate
-  HTML from your headers' `///` comments.
-- **Google Benchmark** — add a CPM block fetching `google/benchmark` and a
-  `bench/` subdirectory with microbenchmarks alongside your unit tests.
+**Goal**: catch formatting + hygiene errors *before* a commit lands,
+so CI is not the first place a contributor sees a failed format check.
 
-These are common but not strictly required for "a working modern C++
-template" — fold them in when you actually need them.
+**Files added**: `.pre-commit-config.yaml`.
+
+[`pre-commit`](https://pre-commit.com) is a Python tool that wires a set
+of hooks into `.git/hooks/pre-commit`. Each hook is a small repo of its
+own (versioned by `rev:`), keeping setup reproducible across machines.
+
+```yaml
+# .pre-commit-config.yaml — minimal, mirrors the formatters CI runs
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v19.1.7
+    hooks:
+      - id: clang-format
+        types_or: [c++, c]
+
+  - repo: https://github.com/cheshirekow/cmake-format-precommit
+    rev: v0.6.13
+    hooks:
+      - id: cmake-format
+      - id: cmake-lint
+```
+
+### Try it
+
+```bash
+pip install pre-commit          # or: brew install pre-commit
+pre-commit install              # registers .git/hooks/pre-commit
+pre-commit run --all-files      # one-time sweep across the repo
+```
+
+After this, `git commit` runs the hooks on staged files and refuses the
+commit if anything fails.
+
+> **Next**: enforce a commit message style.
+
+---
+
+## Step 23 — Commit message linting
+
+**Goal**: enforce [Conventional Commits](https://www.conventionalcommits.org/)
+on PR titles and on every commit pushed to a PR. Conventional Commits
+(`feat: …`, `fix(scope): …`, `docs: …`, …) are machine-readable, so
+release-note generators and changelog tools can use them directly.
+
+**Files added**
+
+| File | Purpose |
+| --- | --- |
+| `commitlint.config.js` | The rule set (extends `@commitlint/config-conventional`). |
+| `.github/workflows/commitlint.yml` | CI workflow that runs `commitlint` on PR titles + commit ranges. |
+
+```js
+// commitlint.config.js
+module.exports = {
+  extends: ["@commitlint/config-conventional"],
+  rules: {
+    "type-enum": [2, "always", [
+      "build", "chore", "ci", "docs", "feat", "fix", "perf",
+      "refactor", "revert", "style", "test",
+    ]],
+    "header-max-length": [2, "always", 100],
+  },
+};
+```
+
+```yaml
+# .github/workflows/commitlint.yml
+name: Commitlint
+on:
+  pull_request: { types: [opened, edited, reopened, synchronize] }
+  push:         { branches: [main] }
+permissions: { contents: read, pull-requests: read }
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-save @commitlint/cli@19 @commitlint/config-conventional@19
+      - if: github.event_name == 'pull_request'
+        env: { PR_TITLE: "${{ github.event.pull_request.title }}" }
+        run: echo "$PR_TITLE" | npx commitlint
+```
+
+Local enforcement is provided by the `conventional-pre-commit` hook in
+`.pre-commit-config.yaml` (Step 22).
+
+> **Next**: API docs with Doxygen.
+
+---
+
+## Step 24 — Doxygen / API docs
+
+**Goal**: an HTML reference for your public headers, generated from
+`///` and `/** ... */` comments. Useful as soon as your library has more
+than a handful of types.
+
+**Files added**: `cmake/Doxygen.cmake`.
+
+```cmake
+macro(enable_doxygen)
+  find_package(Doxygen REQUIRED dot OPTIONAL_COMPONENTS mscgen dia)
+  if(DOXYGEN_FOUND)
+    set(DOXYGEN_PROJECT_NAME    ${PROJECT_NAME})
+    set(DOXYGEN_PROJECT_NUMBER  ${PROJECT_VERSION})
+    set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/docs)
+    set(DOXYGEN_GENERATE_HTML   YES)
+    set(DOXYGEN_GENERATE_LATEX  NO)
+    set(DOXYGEN_HAVE_DOT        YES)
+    set(DOXYGEN_RECURSIVE       YES)
+    set(DOXYGEN_EXTRACT_ALL     YES)
+    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
+    set(DOXYGEN_EXCLUDE_PATTERNS */build/* */out/* */test/* */bench/* */_deps/*)
+
+    doxygen_add_docs(
+      docs
+      ${PROJECT_SOURCE_DIR}/include
+      ${PROJECT_SOURCE_DIR}/src
+      ${PROJECT_SOURCE_DIR}/README.md
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      COMMENT "Generating API documentation with Doxygen")
+  endif()
+endmacro()
+```
+
+In `cmake/ProjectOptions.cmake` add `option(ENABLE_DOXYGEN ...)` (default
+OFF) and call `enable_doxygen()` at the end of `setup_project()`.
+
+### Try it
+
+```bash
+cmake -B build -S . -DENABLE_DOXYGEN=ON
+cmake --build build --target docs
+open build/docs/html/index.html      # macOS; xdg-open on Linux
+```
+
+> **Next**: microbenchmarks.
+
+---
+
+## Step 25 — Microbenchmarks (Google Benchmark)
+
+**Goal**: a `bench/` directory holding [Google Benchmark](https://github.com/google/benchmark)
+microbenchmarks. Off by default — they're timing-sensitive and shouldn't
+share a CTest run with correctness tests.
+
+**Files added**
+
+| File | Purpose |
+| --- | --- |
+| `bench/CMakeLists.txt` | Wires benchmark executables to project options. |
+| `bench/bench_factorial.cpp` | One example benchmark. |
+
+In `cmake/Dependencies.cmake`, add a CPM block gated on the option:
+
+```cmake
+if(ENABLE_BENCHMARKS AND NOT TARGET benchmark::benchmark)
+  cpmaddpackage(NAME benchmark VERSION 1.9.0
+                GITHUB_REPOSITORY "google/benchmark" SYSTEM YES
+                OPTIONS "BENCHMARK_ENABLE_TESTING OFF" "BENCHMARK_ENABLE_INSTALL OFF")
+endif()
+```
+
+In top-level `CMakeLists.txt`, after the `BUILD_FUZZ_TESTS` block:
+
+```cmake
+if(ENABLE_BENCHMARKS)
+  add_subdirectory(bench)
+endif()
+```
+
+A minimal benchmark:
+
+```cpp
+// bench/bench_factorial.cpp
+#include <benchmark/benchmark.h>
+#include <myproject/sample_library.hpp>
+
+static void BM_Factorial(benchmark::State& state) {
+  const auto n = static_cast<int>(state.range(0));
+  for (auto _ : state) {
+    benchmark::DoNotOptimize(factorial(n));
+  }
+}
+BENCHMARK(BM_Factorial)->Arg(5)->Arg(10)->Arg(15);
+```
+
+### Try it
+
+```bash
+cmake -B build -S . -DENABLE_BENCHMARKS=ON
+cmake --build build --target bench_factorial
+./build/bench/bench_factorial
+# → BM_Factorial/5    5.77 ns ...
+```
+
+> **Next**: community files — the last layer for a public-facing repo.
+
+---
+
+## Step 26 — Community files
+
+**Goal**: the GitHub-standard files that signal "this project welcomes
+contributions and handles security responsibly".
+
+**Files added**
+
+| File | Purpose |
+| --- | --- |
+| `CONTRIBUTING.md` | How to build, test, format, submit a PR. |
+| `CODE_OF_CONDUCT.md` | A short stub pointing to the Contributor Covenant 2.1. |
+| `SECURITY.md` | How to report vulnerabilities (private GitHub advisory). |
+| `.github/ISSUE_TEMPLATE/bug_report.yml` | Structured bug-report form. |
+| `.github/ISSUE_TEMPLATE/feature_request.yml` | Structured feature-request form. |
+| `.github/ISSUE_TEMPLATE/config.yml` | Disables blank issues; routes Discussions/security separately. |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR description scaffold + checklist. |
+| `CHANGELOG.md` | Keep-a-Changelog format with an `Unreleased` section. |
+
+GitHub picks these up automatically — no workflow wiring needed:
+
+- `CONTRIBUTING.md` is linked from the **New issue** / **New PR** screens.
+- Issue templates appear when a user clicks **New issue**.
+- `SECURITY.md` adds a **Security** tab CTA.
+- `CODE_OF_CONDUCT.md` is shown on the community-standards page.
+
+For `CHANGELOG.md`, the [Keep a Changelog](https://keepachangelog.com/)
+format is the de-facto standard:
+
+```markdown
+# Changelog
+
+## [Unreleased]
+
+### Added
+- Initial release of the cmake_template project.
+
+[Unreleased]: https://github.com/<org>/<repo>/compare/HEAD
+```
+
+When you cut a release, rename `Unreleased` to the new version + date and
+start a fresh `Unreleased` section above it.
+
+### Try it
+
+```bash
+gh repo view --web        # check the repo's "Community standards" tab
+```
+
+You should see green check-marks for Description, README, Code of Conduct,
+Contributing, License, Security policy, Issue templates, Pull request
+template.
+
+---
+
+## Where you stand (with all extras)
+
+You now have not just a working build but the surrounding
+**software-engineering practices** layer that mature C++ projects ship
+with:
+
+| Layer | What it gives you |
+| --- | --- |
+| Build / test (Steps 1–18) | Reproducible build, sanitizers, fuzzing, coverage, install. |
+| CI (Step 19) | Cross-compiler matrix, codecov, codeql. |
+| Distribution (Step 20) | Template janitor for "Use this template", `rename.sh` for clones. |
+| Polish (Step 21) | License, formatters, READMEs. |
+| Local hygiene (Step 22) | pre-commit catches format/whitespace issues before push. |
+| Commit conventions (Step 23) | commitlint enforces Conventional Commits. |
+| Docs (Step 24) | Doxygen `docs` target. |
+| Performance (Step 25) | Google Benchmark `bench/` directory. |
+| Community (Step 26) | Contributing/SecPolicy/CoC/issue+PR templates/Changelog. |
+
+The build core (Steps 1–21) is "what compiles your code". Steps 22–26
+are "what makes the project good to live with" — the difference between
+a one-developer scratchpad and a public-facing OSS project.

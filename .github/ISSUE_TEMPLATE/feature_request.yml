@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest an improvement or a new piece of tooling for the template.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Start with the *problem*, not the solution. What's the pain point
+        you're hitting today? Who else might hit it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What would you like the template to do? Be concrete.
+      placeholder: |
+        Add an `ENABLE_FOO` CMake option that wires foo into the build,
+        defaulting to OFF so existing users aren't affected ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you ruled out, and why.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This fits the template's goal of "safe, modern defaults that work on GCC + Clang on Linux/macOS".
+        - label: I'm willing to contribute a PR for this.

@@ -1,0 +1,28 @@
+// commitlint — enforces Conventional Commits.
+// Used by .github/workflows/commitlint.yml on PR titles and on every
+// commit pushed to a PR. Local enforcement is provided by the
+// `conventional-pre-commit` hook in .pre-commit-config.yaml.
+module.exports = {
+  extends: ["@commitlint/config-conventional"],
+  rules: {
+    "type-enum": [
+      2,
+      "always",
+      [
+        "build",
+        "chore",
+        "ci",
+        "docs",
+        "feat",
+        "fix",
+        "perf",
+        "refactor",
+        "revert",
+        "style",
+        "test",
+      ],
+    ],
+    "subject-case": [0],
+    "header-max-length": [2, "always", 100],
+  },
+};

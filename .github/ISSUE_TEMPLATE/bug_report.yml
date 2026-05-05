@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in the template is broken or behaves unexpectedly.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill in
+        as much of the form as you can — incomplete reports take much
+        longer to triage.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, plus what you expected to happen.
+      placeholder: |
+        After running `cmake --preset clang-debug`, configuration fails with ...
+        I expected configuration to succeed because ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands you ran, in order.
+      render: bash
+      placeholder: |
+        git clone https://github.com/<you>/<repo>.git
+        cd <repo>
+        cmake --preset clang-debug
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / logs
+      description: Paste the error output. Use a fenced code block.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: cmake-version
+    attributes:
+      label: CMake version
+      description: Output of `cmake --version` (first line).
+      placeholder: "cmake version 3.29.6"
+    validations:
+      required: true
+
+  - type: input
+    id: compiler
+    attributes:
+      label: Compiler + version
+      description: Output of `clang --version` or `g++ --version` (first line).
+      placeholder: "clang version 19.1.7"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows (WSL)
+        - Windows (native)
+        - Dev container
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: prereqs
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I'm running on a supported configuration (CMake ≥ 3.29, C++20 compiler).
+          required: true

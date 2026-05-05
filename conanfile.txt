@@ -1,0 +1,27 @@
+# Conan manifest. Used only when DEPENDENCY_MANAGER=CONAN.
+#
+# Workflow:
+#   conan install . --output-folder=build --build=missing
+#   cmake --preset clang-debug \
+#         -DDEPENDENCY_MANAGER=CONAN \
+#         --toolchain=build/conan_toolchain.cmake
+#   cmake --build out/build/clang-debug
+#
+# Toggle test/benchmark deps by passing -o myproject:with_<feature>=True to
+# conan install, or by editing this file.
+
+[requires]
+fmt/11.0.2
+spdlog/1.15.0
+cli11/2.4.2
+gtest/1.15.0
+# Uncomment to add when needed:
+# catch2/3.7.1
+# benchmark/1.9.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "myproject",
+  "version-string": "0.0.2",
+  "description": "C++ template — vcpkg manifest. Used only when DEPENDENCY_MANAGER=VCPKG.",
+  "dependencies": [
+    "fmt",
+    "spdlog",
+    "cli11"
+  ],
+  "features": {
+    "tests": {
+      "description": "Build the test suite",
+      "dependencies": ["gtest"]
+    },
+    "catch2": {
+      "description": "Enable Catch2 alongside / instead of GoogleTest",
+      "dependencies": ["catch2"]
+    },
+    "benchmarks": {
+      "description": "Build microbenchmarks",
+      "dependencies": ["benchmark"]
+    }
+  }
+}

@@ -40,6 +40,14 @@ if(NOT PROJECT_IS_TOP_LEVEL)
   return()
 endif()
 
+# Valgrind / memcheck — CTest's built-in memcheck driver. Run with:
+#   ctest --test-dir <build> -T memcheck --output-on-failure
+# These hints are picked up by CTest if valgrind is installed; harmless if not.
+set(MEMORYCHECK_COMMAND_OPTIONS
+    "--leak-check=full --show-leak-kinds=all --errors-for-leak-kinds=definite --error-exitcode=1")
+set(MEMORYCHECK_SUPPRESSIONS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.valgrind.supp" CACHE FILEPATH
+    "Valgrind suppressions file (created on demand)")
+
 include(CTest)
 if(BUILD_TESTING)
   add_subdirectory(test)
@@ -50,6 +58,10 @@ if(BUILD_FUZZ_TESTS)
     message(WARNING "Fuzz tests are most useful with asan or tsan enabled.")
   endif()
   add_subdirectory(fuzz_test)
+endif()
+
+if(ENABLE_BENCHMARKS)
+  add_subdirectory(bench)
 endif()
 
 if(CMAKE_SKIP_INSTALL_RULES)

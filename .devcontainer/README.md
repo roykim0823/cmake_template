@@ -2,8 +2,29 @@
 
 This directory defines a VS Code Dev Container based on
 `mcr.microsoft.com/devcontainers/cpp:2-ubuntu24.04`, preloaded with the LLVM 19
-toolchain (clang, clang++, clangd, clang-tidy, lld, lldb) installed from
-Ubuntu's universe repo, ccache, CMake, and Node.js for editor language servers.
+toolchain (clang, clang++, clangd, clang-tidy, lld, lldb, scan-build) installed
+from Ubuntu's universe repo, ccache, CMake, and Node.js for editor language
+servers — plus every analyzer and packaging tool the template's CMake options
+reference, so any `ENABLE_*` flag works out of the box.
+
+## What's in the image
+
+| Tool | Backs |
+| --- | --- |
+| `clang`, `clang-format`, `clang-tidy`, `clangd`, `lld`, `lldb` | Default toolchain. |
+| `scan-build`, `scan-view` | Clang Static Analyzer (`scan-build cmake --build …`). |
+| `cppcheck` | `-DENABLE_CPPCHECK=ON`. |
+| `iwyu` / `include-what-you-use` | `-DENABLE_IWYU=ON`. |
+| `cpplint` | `-DENABLE_CPPLINT=ON`. |
+| `doxygen` + `graphviz` (`dot`) | `-DENABLE_DOXYGEN=ON` (the `docs` build target). |
+| `valgrind` | `ctest -T memcheck`. |
+| `ccache` | Compiler launcher (`ENABLE_CACHE`). |
+| `cmake-format` | Matches `.cmake-format.yaml`; runs in the pre-commit hook. |
+| `pre-commit` | `.pre-commit-config.yaml` runner (`pre-commit install`). |
+| `shellcheck` | `pre-commit` shell-script hook. |
+| `conan` | `-DDEPENDENCY_MANAGER=CONAN`. |
+| `vcpkg` (`$VCPKG_ROOT=$HOME/vcpkg`) | `-DDEPENDENCY_MANAGER=VCPKG`. |
+| `uv` + Python 3.13, Rust (rustup), Node.js 22 + LSP servers | Polyglot tooling. |
 
 ## Files in this directory
 
