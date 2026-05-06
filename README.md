@@ -24,17 +24,80 @@ It includes:
  * a libFuzzer harness
  * microbenchmarks (Google Benchmark, opt-in via `ENABLE_BENCHMARKS`)
  * Doxygen API docs (opt-in via `ENABLE_DOXYGEN`)
- * a polyglot dev container (LLVM, Python, Rust, Node-based LSPs)
  * a large GitHub Actions testing matrix
  * `.editorconfig`, `.pre-commit-config.yaml`, and a commitlint workflow for
    local + CI hygiene checks
  * community files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
    issue templates, PR template, and a Keep-a-Changelog `CHANGELOG.md`
 
-It requires:
+> **Looking for a dev container?** The polyglot dev container that used
+> to live in this repo's `.devcontainer/` was extracted into its own
+> repo: [polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer).
+> Drop those two files (`Dockerfile` + `devcontainer.json`) into a
+> local `.devcontainer/` directory, or reference the published image,
+> and you get every tool listed in [Prerequisites](#prerequisites)
+> pre-installed.
 
- * cmake (≥ 3.29)
- * a C++20 compiler (gcc or clang)
+## Prerequisites
+
+You need a working C++ toolchain plus a few common analyzers. Either
+install them on the host, or use the
+[polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer)
+image which ships everything below pre-installed.
+
+### Required
+
+| Tool | Minimum | Used for |
+| --- | --- | --- |
+| **CMake** | ≥ 3.29 | Build system + presets |
+| **Ninja** | any | Default generator |
+| **C++20 compiler** | GCC ≥ 11 / Clang ≥ 14 | … |
+| **Git** | any | Cloning + version embedding in CPack |
+
+### Optional (each enabled via a `-DENABLE_*=ON` option)
+
+| Tool | Backs |
+| --- | --- |
+| `clang-tidy` | `ENABLE_CLANG_TIDY` |
+| `cppcheck` | `ENABLE_CPPCHECK` |
+| `cpplint` (`pip install cpplint`) | `ENABLE_CPPLINT` |
+| `include-what-you-use` (or `iwyu`) | `ENABLE_IWYU` |
+| `doxygen` + `graphviz` | `ENABLE_DOXYGEN` (the `docs` build target) |
+| `gcovr` | `ENABLE_COVERAGE` (HTML coverage report) |
+| `valgrind` | `ctest -T memcheck` |
+| `scan-build` (Clang Static Analyzer) | external wrapper, see [Run scan-build](#run-scan-build-clang-static-analyzer) |
+| `ccache` or `sccache` | `ENABLE_CACHE` (default ON at top level) |
+| `mold` / `lld` / `gold` | `USER_LINKER_OPTION=MOLD/LLD/GOLD` |
+| `vcpkg` | `DEPENDENCY_MANAGER=VCPKG` |
+| `Conan` (`pip install conan`) | `DEPENDENCY_MANAGER=CONAN` |
+
+### Quick install per platform
+
+#### Ubuntu / Debian (24.04+)
+
+```bash
+sudo apt update
+sudo apt install -y \
+    cmake ninja-build clang clang-tidy clang-tools \
+    cppcheck iwyu doxygen graphviz valgrind \
+    lld mold ccache gcovr shellcheck
+pip install cpplint conan
+```
+
+#### macOS (Homebrew)
+
+```bash
+brew install cmake ninja llvm cppcheck doxygen graphviz \
+    include-what-you-use mold ccache gcovr shellcheck
+pip install cpplint conan
+# Valgrind has no upstream macOS support; rely on sanitizers (ASan/UBSan/TSan)
+# instead, which are enabled by default in this template.
+```
+
+If you'd rather not install all this on the host, see the
+[polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer)
+repo — its `Dockerfile` ships every tool above plus the Python/Rust
+toolchains used by sibling templates.
 
 ## Getting Started
 
@@ -92,7 +155,6 @@ set of presets is `gcc-debug`, `gcc-release`, `clang-debug`, `clang-release`
 | `CHANGELOG.md` | Project changelog ([Keep a Changelog](https://keepachangelog.com/) format). |
 | `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` / `SECURITY.md` | Community / contribution guidelines. |
 | `bench/` | Microbenchmarks (Google Benchmark) — built when `ENABLE_BENCHMARKS=ON`. |
-| `.devcontainer/` | VS Code dev container — see [`.devcontainer/README.md`](.devcontainer/README.md). |
 | `.github/` | GitHub Actions / Dependabot / template-rename automation — see [`.github/README.md`](.github/README.md). |
 | `cmake/` | Build-system modules (warnings, sanitizers, hardening, dependencies, …) — see [`cmake/README.md`](cmake/README.md). |
 | `src/sample_library/` | A toy library exposing `factorial(int)`. Replace with your real library. |
@@ -392,24 +454,6 @@ The fuzz harness (`fuzz_test/`) is framework-independent. It uses libFuzzer
 directly and only builds when sanitizers + libFuzzer are both available. See
 the [libFuzzer tutorial](https://github.com/google/fuzzing/blob/master/tutorial/libFuzzerTutorial.md).
 
-## Dev container scope
-
-The `.devcontainer/` image is a polyglot environment. Beyond the C++ toolchain
-(LLVM 19: clang, clangd, clang-tidy, lld, lldb, llvm-cov, etc.; CMake; Ninja;
-ccache), it also bundles:
-
-- **Python** — `uv` (installed in the image) plus a default Python 3.13
-  managed by uv.
-- **Rust** — installed via `rustup` (cargo, rustc).
-- **Node.js 22** — used to host editor language servers globally:
-  `typescript`, `typescript-language-server`, `pyright`,
-  `vscode-langservers-extracted` (HTML/CSS/JSON), `eslint`, and
-  `@typescript-eslint/*`.
-
-The Python and Rust toolchains support C++ adjacent workflows (build scripts,
-code generators, native bindings); the Node-based LSPs let the same container
-host editor tooling for any web/script files that live alongside the C++.
-
 ## Design choices
 
 The template starts a C++ project with safe, modern defaults. Each choice
@@ -493,7 +537,7 @@ The default build type is `RelWithDebInfo` — debuggable and fast.
 
 ## More Details
 
- * [Docker / Dev Container](.devcontainer/README.md)
+ * [Polyglot dev container (separate repo)](https://github.com/your-org/polyglot_devcontainer)
  * [GitHub Configuration](.github/README.md)
  * [CMake Modules](cmake/README.md)
  * [Build the template from scratch (tutorial)](dummy_cpp_dev.md)

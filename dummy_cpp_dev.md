@@ -60,6 +60,15 @@ goal is to understand every piece, not to copy it.
 
 ## Step 1 — The dev container
 
+> **Heads up.** The dev container has been **extracted out of this repo**
+> into [polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer)
+> so the same image can be reused by sibling templates (Python, Rust)
+> without duplication. If you just want to *use* it, drop those two
+> files (`Dockerfile` + `devcontainer.json`) into your project's
+> `.devcontainer/` directory and skip the rest of this step. The walk-through
+> below explains how the image is built — useful if you want to fork
+> the polyglot repo or recreate one from scratch.
+
 **Goal**: a reproducible Linux build environment with LLVM 19 (clang,
 clang-format, clang-tidy, lldb, lld), CMake, Ninja, ccache, and Node.js
 (for editor language servers). At the end of this step VS Code can "Reopen
@@ -145,6 +154,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         shellcheck \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ── Rust-side system tools (matches sibling rust_template) ───────────────────
+#   mold         : fast linker.
+#   musl-tools   : cross-compile to *-unknown-linux-musl targets.
+#   libclang-dev : required by Rust crates that use bindgen.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        mold \
+        musl-tools \
+        libclang-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # ── ccache ───────────────────────────────────────────────────────────────────
 # ccache caches compiler output, so a rebuild after a header tweak is
 # nearly instant. We symlink ccache as `clang`/`clang++`/`cc`/`c++` in
@@ -175,25 +194,44 @@ RUN npm install -g \
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
-# uv (a fast Python package manager) and Python 3.13.
+# uv (a fast Python package manager) and Python 3.12 + 3.13. The CI matrix
+# also tests 3.10 + 3.11 on ephemeral runners — they're not pre-installed
+# here to save ~200 MB. Add locally on demand:  uv python install 3.10 3.11
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && echo 'export PATH="$HOME/.local/bin:$PATH"' >> "${HOME}/.bashrc" \
-    && "${HOME}/.local/bin/uv" python install 3.13
+    && "${HOME}/.local/bin/uv" python install 3.12 3.13
 
-# Python-based dev tools — installed as standalone uv tools so each gets
-# its own isolated environment but lands on PATH (~/.local/bin).
-#   cpplint       → ENABLE_CPPLINT     (Step 10e)
-#   cmake-format  → matches .cmake-format.yaml + the pre-commit hook
-#   pre-commit    → .pre-commit-config.yaml runner (Step 22)
-#   conan         → DEPENDENCY_MANAGER=CONAN (Step 7f)
+# Python-based dev tools — each in its own isolated uv env on PATH.
+# C++ side:
+#   cpplint        → ENABLE_CPPLINT     (Step 10e)
+#   cmake-format   → matches .cmake-format.yaml + the pre-commit hook
+#   pre-commit     → .pre-commit-config.yaml runner (Step 22)
+#   conan          → DEPENDENCY_MANAGER=CONAN (Step 7f)
+# Python side (so this container also drives a Python sibling repo):
+#   ruff, mypy, bandit[toml], pip-audit, commitizen
 RUN "${HOME}/.local/bin/uv" tool install cpplint \
     && "${HOME}/.local/bin/uv" tool install cmake-format \
     && "${HOME}/.local/bin/uv" tool install pre-commit \
-    && "${HOME}/.local/bin/uv" tool install conan
+    && "${HOME}/.local/bin/uv" tool install conan \
+    && "${HOME}/.local/bin/uv" tool install ruff \
+    && "${HOME}/.local/bin/uv" tool install mypy \
+    && "${HOME}/.local/bin/uv" tool install "bandit[toml]" \
+    && "${HOME}/.local/bin/uv" tool install pip-audit \
+    && "${HOME}/.local/bin/uv" tool install commitizen
 
-# Rust via rustup (some C++ adjacent tools / build scripts are written in Rust).
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && echo 'source "$HOME/.cargo/env"' >> "${HOME}/.bashrc"
+# Rust via rustup — stable only (beta + nightly skipped to save ~1.4 GB; the
+# CI matrix tests them on ephemeral runners). `--profile default` already
+# pulls in rustfmt + clippy; we add rust-src, rust-analyzer, llvm-tools-preview.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+        sh -s -- -y --default-toolchain stable --profile default \
+    && echo 'source "$HOME/.cargo/env"' >> "${HOME}/.bashrc" \
+    && "${HOME}/.cargo/bin/rustup" component add rust-src rust-analyzer llvm-tools-preview
+
+# Cargo extensions — match rust_template's image so this container drives
+# the sibling repo without switching.
+RUN "${HOME}/.cargo/bin/cargo" install --locked \
+        cargo-nextest cargo-llvm-cov cargo-audit cargo-deny cargo-machete \
+        cargo-msrv cargo-watch cargo-edit cargo-outdated mdbook
 
 # vcpkg — shallow clone + bootstrap. Backs DEPENDENCY_MANAGER=VCPKG (Step 7f).
 RUN git clone --depth 1 https://github.com/microsoft/vcpkg.git "${HOME}/vcpkg" \
