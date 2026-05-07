@@ -1,11 +1,17 @@
 # cmake_template
 
-[![ci](https://github.com/cpp-best-practices/cmake_template/actions/workflows/ci.yml/badge.svg)](https://github.com/cpp-best-practices/cmake_template/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/cpp-best-practices/cmake_template/branch/main/graph/badge.svg)](https://codecov.io/gh/cpp-best-practices/cmake_template)
-[![CodeQL](https://github.com/cpp-best-practices/cmake_template/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/cpp-best-practices/cmake_template/actions/workflows/codeql-analysis.yml)
+A production-grade C++ project template that bundles the build-system,
+testing, static-analysis, security, and CI tooling needed to ship and
+maintain real-world C++ code — so a new project starts with all of that
+wired up correctly on day one instead of accreting it over months.
 
-A C++ Best Practices GitHub template for getting up and running with C++
-quickly.
+The defaults are chosen for **correctness, portability, and long-term
+maintainability**: bugs are caught at compile time where possible,
+behavior stays consistent across GCC/Clang on Linux and macOS, and the
+project works the same way whether built standalone or pulled in as a
+subdirectory dependency. Every quality knob is opt-out (top-level
+builds turn safety checks on by default), so you keep what helps and
+disable what doesn't fit your workflow.
 
 ## At a glance
 
@@ -30,20 +36,15 @@ It includes:
  * community files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
    issue templates, PR template, and a Keep-a-Changelog `CHANGELOG.md`
 
-> **Looking for a dev container?** The polyglot dev container that used
-> to live in this repo's `.devcontainer/` was extracted into its own
-> repo: [polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer).
-> Drop those two files (`Dockerfile` + `devcontainer.json`) into a
-> local `.devcontainer/` directory, or reference the published image,
-> and you get every tool listed in [Prerequisites](#prerequisites)
-> pre-installed.
-
 ## Prerequisites
 
-You need a working C++ toolchain plus a few common analyzers. Either
-install them on the host, or use the
-[polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer)
-image which ships everything below pre-installed.
+You need a working C++ toolchain plus a few common analyzers. You have
+two options:
+
+- **Use the [polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer)
+  image** — ships everything below pre-installed.
+- **Install manually on the host** — see the [Quick install per platform](#quick-install-per-platform)
+  section below.
 
 ### Required
 
@@ -75,7 +76,19 @@ image which ships everything below pre-installed.
 
 #### Ubuntu / Debian (24.04+)
 
+> **Note**: Ubuntu 24.04 (noble) ships CMake 3.28 in its default repos, but
+> this template requires ≥ 3.29 (see [why](#why-cmake-329)). Add Kitware's
+> APT repo first so `apt install cmake` pulls a current version:
+
 ```bash
+# 1. Add Kitware's apt repo (provides recent CMake on Ubuntu/Debian).
+sudo apt install -y wget gpg
+wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
+  | gpg --dearmor | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ noble main' \
+  | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+
+# 2. Install the rest of the toolchain.
 sudo apt update
 sudo apt install -y \
     cmake ninja-build clang clang-tidy clang-tools \
@@ -83,6 +96,22 @@ sudo apt install -y \
     lld mold ccache gcovr shellcheck
 pip install cpplint conan
 ```
+
+If you'd rather avoid a third-party repo, install CMake via pip and drop
+it from the `apt install` line above:
+
+```bash
+pip install "cmake>=3.29"
+```
+
+##### Why CMake 3.29
+
+Two features in this template were introduced in CMake 3.29:
+
+- The `LINKER_TYPE` target property (`cmake/Linker.cmake`) — lets `USER_LINKER_OPTION=MOLD/LLD/GOLD` work without manual `-fuse-ld=` plumbing.
+- Policy `CMP0155` (`CMakeLists.txt`) — pinned to `OLD` to work around a clang-tidy + C++ modules conflict that appeared in 3.29.
+
+A real CMake 3.28 would error out on the unknown policy and silently no-op `LINKER_TYPE`, so the 3.29 floor is load-bearing rather than nominal.
 
 #### macOS (Homebrew)
 
@@ -93,11 +122,6 @@ pip install cpplint conan
 # Valgrind has no upstream macOS support; rely on sanitizers (ASan/UBSan/TSan)
 # instead, which are enabled by default in this template.
 ```
-
-If you'd rather not install all this on the host, see the
-[polyglot_devcontainer](https://github.com/your-org/polyglot_devcontainer)
-repo — its `Dockerfile` ships every tool above plus the Python/Rust
-toolchains used by sibling templates.
 
 ## Getting Started
 
@@ -540,7 +564,7 @@ The default build type is `RelWithDebInfo` — debuggable and fast.
  * [Polyglot dev container (separate repo)](https://github.com/your-org/polyglot_devcontainer)
  * [GitHub Configuration](.github/README.md)
  * [CMake Modules](cmake/README.md)
- * [Build the template from scratch (tutorial)](dummy_cpp_dev.md)
+ * [Build the template from scratch (tutorial)](tutorial/00-intro.md)
  * [Contributing guide](CONTRIBUTING.md)
  * [Code of Conduct](CODE_OF_CONDUCT.md)
  * [Security policy](SECURITY.md)
