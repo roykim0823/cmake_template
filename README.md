@@ -50,7 +50,7 @@ two options:
 
 | Tool | Minimum | Used for |
 | --- | --- | --- |
-| **CMake** | ≥ 3.29 | Build system + presets |
+| **CMake** | 3.29 ≤ v < 4.0 | Build system + presets |
 | **Ninja** | any | Default generator |
 | **C++20 compiler** | GCC ≥ 11 / Clang ≥ 14 | … |
 | **Git** | any | Cloning + version embedding in CPack |
@@ -76,47 +76,41 @@ two options:
 
 #### Ubuntu / Debian (24.04+)
 
-> **Note**: Ubuntu 24.04 (noble) ships CMake 3.28 in its default repos, but
-> this template requires ≥ 3.29 (see [why](#why-cmake-329)). Add Kitware's
-> APT repo first so `apt install cmake` pulls a current version:
+> **Note**: Ubuntu 24.04's default `cmake` package is 3.28, but this
+> template requires CMake **3.29 ≤ version < 4.0** (see [why](#why-cmake-3293x)).
+> Install CMake via pip with a 3.x pin, then `apt install` the rest:
 
 ```bash
-# 1. Add Kitware's apt repo (provides recent CMake on Ubuntu/Debian).
-sudo apt install -y wget gpg
-wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
-  | gpg --dearmor | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ noble main' \
-  | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
-
-# 2. Install the rest of the toolchain.
+pip install "cmake>=3.29,<4.0"       # any 3.x ≥ 3.29; avoids 4.x
 sudo apt update
 sudo apt install -y \
-    cmake ninja-build clang clang-tidy clang-tools \
+    ninja-build clang clang-tidy clang-tools \
     cppcheck iwyu doxygen graphviz valgrind \
     lld mold ccache gcovr shellcheck
 pip install cpplint conan
 ```
 
-If you'd rather avoid a third-party repo, install CMake via pip and drop
-it from the `apt install` line above:
-
-```bash
-pip install "cmake>=3.29"
-```
-
-##### Why CMake 3.29
+##### Why CMake 3.29–3.x
 
 Two features in this template were introduced in CMake 3.29:
 
 - The `LINKER_TYPE` target property (`cmake/Linker.cmake`) — lets `USER_LINKER_OPTION=MOLD/LLD/GOLD` work without manual `-fuse-ld=` plumbing.
 - Policy `CMP0155` (`CMakeLists.txt`) — pinned to `OLD` to work around a clang-tidy + C++ modules conflict that appeared in 3.29.
 
-A real CMake 3.28 would error out on the unknown policy and silently no-op `LINKER_TYPE`, so the 3.29 floor is load-bearing rather than nominal.
+CMake 4.x is intentionally avoided: the 4.0 release drops compatibility
+for `cmake_minimum_required` < 3.5 across the dependency tree (CPM-fetched
+projects included), which surfaces as configure-time errors in third-party
+modules. Any 3.x ≥ 3.29 works.
 
 #### macOS (Homebrew)
 
+> **Note**: `brew install cmake` currently ships CMake 4.x; this template
+> needs the 3.x line (see [why](#why-cmake-3293x)). Install CMake via pip
+> instead, then `brew` the rest:
+
 ```bash
-brew install cmake ninja llvm cppcheck doxygen graphviz \
+pip install "cmake>=3.29,<4.0"       # any 3.x ≥ 3.29; avoids 4.x
+brew install ninja llvm cppcheck doxygen graphviz \
     include-what-you-use mold ccache gcovr shellcheck
 pip install cpplint conan
 # Valgrind has no upstream macOS support; rely on sanitizers (ASan/UBSan/TSan)
